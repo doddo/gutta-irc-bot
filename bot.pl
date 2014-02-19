@@ -22,22 +22,23 @@ use vars qw($VERSION %IRSSI);
 $VERSION = '0.1';
 %IRSSI = (
     authors => 'Petter H',
-    name => 'bot',
-    description => 'All around Irssi bots brother.',
+    name => 'gutta',
+    description => 'All around Irssi bots brother gutta.',
     license => 'GPL',
 );
 
 
 # loading the brainfile
 #
-#
+# creat it if need be#
 my $brainfile = 'brainfile';
 unless ( -f $brainfile)
 {
    create_brainfile($brainfile);
 }
-
+# and then load it
 my $brain = retrieve($brainfile);
+
 
 sub create_brainfile
 {
@@ -57,27 +58,20 @@ sub process_message
     my $target = shift;
     my $save;
 
-    # don't act upon own messages
-    return if $nick eq $server->{nick};
-
-
     while ($msg =~ m/([\S]{2,100})(\+\+|--)/g)
     {
          $server->command("msg $target " . karma($1,$2,$nick));
          $save = 1;
     }
 
-    if ($msg =~ m/^srank\s+(\S+)/) {
-        my @targets = srank($1);
-
+    if ($msg =~ m/^srank\s+(\S+)?/) {
+        $server->command("msg $target " . $_) foreach srank($1)
     } elsif ($msg =~ m/^\s*!ibood/) {
         $server->command("msg $target " . ibood());
     } elsif ($msg =~m/^\s*!slap\s+(\S+)/){
         $server->command("msg $target " . slap($1));
-    }  
-
+    }
     
-    #$server->command("msg $target $nick:du sa $msg i $target");
 
     store $brain, $brainfile if $save;
 }
@@ -125,21 +119,28 @@ sub karma
   if (($modifier eq '++') and 
       ($user ne $target))
   {
-    $$brain{$target}++;
+    $$brain{'karma'}{lc($target)}++;
   } else {
-    $$brain{$target}--;
+    $$brain{'karma'}{lc($target)}--;
   }
   
-  return "$target now has " . $$brain{$target} . " points of karma." ;
+  return "$target now has " . $$brain{'karma'}{$target} . " points of karma." ;
 }
 
 sub srank
 {
     my $target = shift;
-    return map { $_ . ": " . $$target{$_}  } grep($target, keys %{$brain});
-
+    my @sranks;
+    warn("OK KALLE");
+    my @karmalist = sort { $$brain{'karma'}{$b} <=> $$brain{'karma'}{$a} } keys %{$$brain{'karma'}};
+    @karmalist = grep(/$target/, @karmalist) if $target;
+    foreach (@karmalist)
+    {
+        push(@sranks, $_ . ":" . $$brain{'karma'}{$_});
+        last if (scalar @sranks >10);
+    }
+    return @sranks;
 }
-
 
 Irssi::signal_add_last('message public', sub {
     my $server = shift;
@@ -148,7 +149,10 @@ Irssi::signal_add_last('message public', sub {
     my $mask = shift;
     my $target = shift;
     Irssi::signal_continue($server, $msg, $nick, $mask, $target);
-    process_message($server, $msg, $nick, $target);
+    eval {
+        process_message($server, $msg, $nick, $target) if $nick ne $server->{nick};
+    };
+    warn ($@) if $@;
 });
 =pod
 Irssi::signal_add_last('message own_public', sub {
