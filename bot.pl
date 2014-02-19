@@ -34,7 +34,7 @@ $VERSION = '0.1';
 my $brainfile = 'brainfile';
 unless ( -f $brainfile)
 {
-    my %brain = create_brainfile($brainfile);
+   create_brainfile($brainfile);
 }
 
 my $brain = retrieve($brainfile);
@@ -43,9 +43,9 @@ sub create_brainfile
 {
     my $brainfile = shift;
     warn "initialising new brain file\n";
-    my %brain = {
-        karma => {}
-    };
+    my %brain = (
+        karma => {},
+    );
     store \%brain, $brainfile;
 }
 
