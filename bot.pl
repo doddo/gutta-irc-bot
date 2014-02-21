@@ -124,7 +124,7 @@ sub karma
     $$brain{'karma'}{lc($target)}--;
   }
   
-  return "$target now has " . $$brain{'karma'}{$target} . " points of karma." ;
+  return "$target now has " . $$brain{'karma'}{lc($target)} . " points of karma." ;
 }
 
 sub srank
@@ -133,10 +133,10 @@ sub srank
     my @sranks;
     warn("OK KALLE");
     my @karmalist = sort { $$brain{'karma'}{$b} <=> $$brain{'karma'}{$a} } keys %{$$brain{'karma'}};
-    @karmalist = grep(/$target/, @karmalist) if $target;
+    @karmalist = grep(/$target/i, @karmalist) if $target;
     foreach (@karmalist)
     {
-        push(@sranks, $_ . ":" . $$brain{'karma'}{$_});
+        push(@sranks, $_ . " (" . $$brain{'karma'}{$_} .")");
         last if (scalar @sranks >10);
     }
     return @sranks;
