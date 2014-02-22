@@ -1,5 +1,11 @@
-# Irssi bot
+# Gutta the Irssi bot
 
 ## Install
 
-Put bot.pl in ~/.irssi/scripts/ and run /script load bot.pl
+Put the whole thing under -> ~/.irssi/scripts
+
+do /load gutta.pl
+
+and then its good to go.
+
+
