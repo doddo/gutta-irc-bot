@@ -22,7 +22,7 @@ sub process_msg
         @response = $self->srank($1);
     }
 
-    $self->save();
+    $self->save() if $save;
 
     return @response;
 }
