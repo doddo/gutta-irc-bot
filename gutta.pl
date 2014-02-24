@@ -17,7 +17,11 @@ use vars qw($VERSION %IRSSI);
 
 use Module::Pluggable search_path => "Gutta::Plugins",
                       instantiate => 'new';
- 
+use File::Basename;
+chdir(dirname(__FILE__));
+
+use Data::Dumper;
+
 $VERSION = '0.1';
 %IRSSI = (
     authors => 'Petter H',
@@ -65,6 +69,18 @@ Irssi::signal_add_last('message public', sub {
     };
     warn ($@) if $@;
 });
+
+Irssi::timeout_add(6000, sub {
+    Irssi::print("heartbeat from gutta");
+    foreach my $server (Irssi::servers())
+    {
+        #warn Dumper($server);
+    }
+
+}, undef);
+
+
+
 =pod
 Irssi::signal_add_last('message own_public', sub {
     my ($server, $msg, $target) = @_;
