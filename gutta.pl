@@ -35,6 +35,7 @@ sub process_message
     my $server = shift;
     my $msg = shift;
     my $nick = shift;
+    my $mask = shift;
     my $target = shift;
     my $save;
 
@@ -65,17 +66,28 @@ Irssi::signal_add_last('message public', sub {
     my $target = shift;
     Irssi::signal_continue($server, $msg, $nick, $mask, $target);
     eval {
-        process_message($server, $msg, $nick, $target) if $nick ne $server->{nick};
+        process_message($server, $msg, $nick, $mask, $target) if $nick ne $server->{nick};
     };
     warn ($@) if $@;
 });
 
-Irssi::timeout_add(6000, sub {
+Irssi::timeout_add(2142, sub { 
     Irssi::print("heartbeat from gutta");
-    foreach my $server (Irssi::servers())
-    {
-        #warn Dumper($server);
-    }
+    eval {
+        $_->heartbeat() foreach plugins();
+        foreach my $server (Irssi::servers())
+        {
+            #warn Dumper($server);
+            foreach my $plugin (plugins())
+            {
+                foreach my $command ($plugin->heartbeat_res($server->{address}))
+                {
+                    $server->command($_);
+                }
+            }
+        }
+    };
+    Irssi:print($@) if $@;
 
 }, undef);
 

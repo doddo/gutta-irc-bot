@@ -8,8 +8,9 @@ sub new
 {
     my $class = shift;
     my $self = bless {
-          data => {},
-      datafile => undef,
+              data => {},
+          datafile => undef,
+   heartbeat_act_s => 40, # default act on heartbeats ~ every 40 secs.
     }, $class;
     $self->_initialise();
     return $self;
@@ -48,6 +49,14 @@ sub save
 sub heartbeat
 {
     # the plugins can handle heartbeats to act upon things outside of the irssi
+
+}
+
+sub heartbeat_res
+{
+    # Here process irc commands from the plugin from each connected to server
+    # The heartbeat sets the date, the result returns it
+    my $servername = shift;
 
 }
 
