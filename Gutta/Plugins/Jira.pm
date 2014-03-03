@@ -65,7 +65,7 @@ sub process_msg
     my $msg = shift;
     return undef unless $msg;
     # word boundries does not seem to work???
-    if ($msg =~ /\b([A-Z]{3,30}-[1-9]{1,7})\b/) 
+    if ($msg =~ /([A-Z]{3,30}-[0-9]{1,7})/) 
     { 
        return "unset url." unless $self->{data}{'url'};
        return $self->get_jira_issue($1);
@@ -105,7 +105,7 @@ sub __setup_jira_feed
     my $feed;
     if ($action eq 'del')
     {
-        undef($self->{data}{feeds}{$feedkey});
+        delete($self->{data}{feeds}{$feedkey});
         $self->save();
         return "undefined feed $feedkey";
     } elsif($action eq 'list') {
@@ -134,6 +134,19 @@ sub __setup_jira_feed
 
 }
 
+sub _heartbeat_act
+{
+    my $self = shift;
+
+    if (scalar keys %{$self->{data}{feeds}} >0) {
+        warn "calling monitor_jira_feed\n";
+        $self->monitor_jira_feed;
+    }
+}
+
+
+
+
 sub monitor_jira_feed
 {
     my $self = shift; 
@@ -153,9 +166,8 @@ sub monitor_jira_feed
        $$feeds{$feedkey}{timestamp}||=0;
 #        my @report_to_channels = @{$$feeds{$feedkey}{'channel'}};
 #        my @report_to_servers = @{$$feeds{$feedkey}{'server'}};
-    
        my ($status, $feeddata) = $self->__download_jira_feed($feedkey);
-
+       
        unless ($status)
        {
            warn ("unable to download for feed $feedkey: $feeddata\n");

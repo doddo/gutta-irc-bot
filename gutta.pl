@@ -38,8 +38,7 @@ sub process_message
     my $mask = shift;
     my $target = shift;
     my $save;
-
-
+    
     if ($msg =~ m/!plugins/)
     {
         $server->command("msg $target INSTALLED PLUGINS:");
@@ -82,7 +81,7 @@ Irssi::timeout_add(2142, sub {
             {
                 foreach my $command ($plugin->heartbeat_res($server->{address}))
                 {
-                    $server->command($_);
+                    $server->command($command);
                 }
             }
         }
