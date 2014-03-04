@@ -88,7 +88,7 @@ sub _initialise
 {
     my $self = shift;
     $self->{datafile} = "Gutta/Data/" . __PACKAGE__ . ".data",
-    $self->load(); # load the karma file
+    $self->load(); # load the jira file
 }
 
 sub __setup_jira_feed
@@ -103,7 +103,7 @@ sub __setup_jira_feed
     my $feedkey = shift;
     my @args = @_;
     my $feed;
-    if ($action eq 'del')
+    if ($action =~ '^del')
     {
         delete($self->{data}{feeds}{$feedkey});
         $self->save();
@@ -131,21 +131,52 @@ sub __setup_jira_feed
     $self->save();
     return sprintf ("adding feed '%s' servers '%s' and channels '%s'",
                    $feedkey, join(',', @{$$feed{server}}), join(',', @{$$feed{channel}}));
-
 }
 
 sub _heartbeat_act
 {
-    my $self = shift;
-
-    if (scalar keys %{$self->{data}{feeds}} >0) {
+    my $self = shift; 
+    if (scalar keys %{$self->{data}{feeds}} >0)
+    {
         warn "calling monitor_jira_feed\n";
         $self->monitor_jira_feed;
     }
 }
 
-
-
+sub heartbeat_res
+{
+    my $self = shift;
+    my $server = shift;
+    my $news = $self->{news};
+    my $server_ok = 0;
+    my @payload;
+    foreach my $feedkey (keys %{$news})
+    {
+        # OK check if the feed is configured for this server.
+        foreach my $server_ok_re  (@{$self->{data}{feeds}{$feedkey}{server}})
+        {
+            if ($server =~ $server_ok_re)
+            {
+                warn("$server matched $server_ok_re. Good.");
+                $server_ok = 1;
+            }
+        }
+        # OK - lets return here if no server mathced
+        return unless $server_ok;
+        
+        while (my $news_item = shift @{$$news{$feedkey}})
+        {
+            # OK check which channels to push these intresting news to
+            foreach my $channel (@{$self->{data}{feeds}{$feedkey}{channel}})
+            {
+                # build the pure irc command here, and push into the @payload.
+                push @payload, "msg ${channel} " . $news_item;
+            }
+        }
+    }
+    delete($self->{news});
+    return @payload
+}
 
 sub monitor_jira_feed
 {
@@ -156,55 +187,50 @@ sub monitor_jira_feed
         pattern   => "%Y-%m-%dT%H:%M:%S%Z",
         on_error  => 'croak',
     );
-    my @news;
+    my %news;
+    $self->{news} = \%news;
     my $latest_timestamp = 0;
     my $nowt = DateTime->now();
-
-
+    
     foreach my $feedkey (keys %{$feeds})
     {
-       $$feeds{$feedkey}{timestamp}||=0;
-#        my @report_to_channels = @{$$feeds{$feedkey}{'channel'}};
-#        my @report_to_servers = @{$$feeds{$feedkey}{'server'}};
-       my ($status, $feeddata) = $self->__download_jira_feed($feedkey);
-       
-       unless ($status)
-       {
+        $$feeds{$feedkey}{timestamp}||=0;
+        
+        my ($status, $feeddata) = $self->__download_jira_feed($feedkey);
+        
+        unless ($status)
+        {
            warn ("unable to download for feed $feedkey: $feeddata\n");
            next;
-       }
-       
-       my $feed = XML::FeedPP->new( $feeddata );
-
-
-       foreach my $item ( $feed->get_item() ) 
-       {
-       #        print "URL: ", $item->link(), "\n";
+        }
+        
+        my $feed = XML::FeedPP->new($feeddata);
+        
+        foreach my $item ($feed->get_item()) 
+        {
             my $title = $item->title();
-
-            # parse the pubdate from the item (the news item)
+            
+            # parse the pubDate from the item (the news item)
             my $pubdate = $item->pubDate();
             $pubdate =~ s/\.[0-9]{3}//;
             my $dt = $strp->parse_datetime($pubdate);
             my $post_timestamp =  $dt->strftime('%s');
-
-           if ($post_timestamp <= $$feeds{$feedkey}{timestamp})  {
+            
+            if ($post_timestamp <= $$feeds{$feedkey}{timestamp})  {
                 # Hers what happens with _OLD_ news
-                warn sprintf ("Jira feed:%s post_timestamp %s is older than latest stored timestamp: %s", 
-                                $feedkey,  $post_timestamp,  $$feeds{$feedkey}{timestamp});
+                #warn sprintf ("Jira feed:%s post_timestamp %s is older than latest stored timestamp: %s", 
+                #                $feedkey,  $post_timestamp,  $$feeds{$feedkey}{timestamp});
                 next;
-            } elsif  ($nowt->subtract_datetime_absolute($dt)->delta_seconds > 360000) {
+            } elsif ($nowt->subtract_datetime_absolute($dt)->delta_seconds > 360000) {
                 # and  to prevent gutta from rambling old stuff because he's been out of sync
                 warn sprintf ("Jira feed:%s datetime from post %s is more than 1 hours older than current time %s", 
                                 $feedkey, $dt->strftime('%F %T'), $nowt->strftime('%F %T'));
                 next;
-           } 
+           }
            
-            
-            
-            if ($title =~ m{^\s* 
+           if ($title =~ m{^\s* 
                     <a\s*href=[^>]+>\s*([^<>]+)\s*</a>\s* # the name
-                        ((:?re)?opened|closed|created)\s*  # what they do?
+                        ((:?re)?opened|closed|created)\s* # what they do?
             <}ix)
             {
                 my $name = $1;
@@ -214,14 +240,14 @@ sub monitor_jira_feed
                 $title =~ s/\s*$//;
                 my $link = $item->link();
                 
-                push @news, sprintf ("%s %s %s (%s)\n", $name, $did, $title, $link);
+                push @{$news{$feedkey}}, sprintf ("%s %s %s (%s)\n", $name, $did, $title, $link);
                 print sprintf ("OK %s %s %s (%s)\n", $name, $did, $title, $link);
-                $latest_timestamp = $post_timestamp if ( $post_timestamp  > $latest_timestamp);
+                $latest_timestamp = $post_timestamp if ( $post_timestamp > $latest_timestamp);
            }
         }
         if ($$feeds{$feedkey}{timestamp} < $latest_timestamp)
         {
-            $$feeds{$feedkey}{timestamp} = $latest_timestamp ;
+            $$feeds{$feedkey}{timestamp} = $latest_timestamp;
             $self->save();
         }
     }
@@ -247,7 +273,7 @@ sub __download_jira_feed
 
 
      if ($response->is_success) {
-         return 1, $response->decoded_content;  
+         return 1, $response->decoded_content;
      }
      else {
          return 0, $response->status_line;

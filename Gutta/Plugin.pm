@@ -8,13 +8,15 @@ use DateTime;
 sub new 
 {
     my $class = shift;
+    my $dt =  DateTime->new( year=>(2000+int(rand(10))));
     my $self = bless {
                 data => {},
             datafile => undef,
      heartbeat_act_s => 58, # default act on heartbeats ~ every 58 secs.
-    heartbeat_act_dt => DateTime->new( year=>2000),
+    heartbeat_act_ts => int(rand(10)), 
     }, $class;
     $self->_initialise();
+    warn "creating new class\n";
     return $self;
 }
 
@@ -52,12 +54,13 @@ sub heartbeat
 {
     # the plugins can handle heartbeats to act upon things outside of the irssi
     my $self = shift;
-    
-    my $nowt = DateTime->now();
-    if ($nowt->subtract_datetime_absolute($self->{heartbeat_act_dt})->delta_seconds 
-                >=   $self->{heartbeat_act_s})
+    my $nowt = time;
+
+
+    if (($nowt - $self->{heartbeat_act_ts}) >= $self->{heartbeat_act_s})
     {
-        $self->{heartbeat_act_dt} = $nowt;
+        warn sprintf "heartbeat called for heartbeat act because delta between %s minus %s was %i", $nowt, $self->{heartbeat_act_ts}, ($nowt - $self->{heartbeat_act_ts});
+        $self->{heartbeat_act_ts} = $nowt;
         $self->_heartbeat_act;
     }
 }
@@ -84,6 +87,7 @@ sub heartbeat_res
     my $self = shift;
     my $servername = shift;
 
+    return undef;
 }
 
 

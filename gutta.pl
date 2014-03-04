@@ -22,6 +22,8 @@ chdir(dirname(__FILE__));
 
 use Data::Dumper;
 
+my @PLUGINS  = plugins();
+
 $VERSION = '0.1';
 %IRSSI = (
     authors => 'Petter H',
@@ -46,7 +48,7 @@ sub process_message
         return;
     }
 
-    foreach my $plugin (plugins()) 
+    foreach my $plugin (@PLUGINS) 
     {
         foreach($plugin->process_msg($msg, $nick))
         {
@@ -72,21 +74,31 @@ Irssi::signal_add_last('message public', sub {
 
 Irssi::timeout_add(2142, sub { 
     Irssi::print("heartbeat from gutta");
-    eval {
-        $_->heartbeat() foreach plugins();
-        foreach my $server (Irssi::servers())
-        {
-            #warn Dumper($server);
-            foreach my $plugin (plugins())
+    
+    if (Irssi::servers())
+    {
+        eval {
+            $_->heartbeat() foreach (@PLUGINS);
+            foreach my $server (Irssi::servers())
             {
-                foreach my $command ($plugin->heartbeat_res($server->{address}))
+                # dont act when server is not connected
+                next unless $server->{connected};
+
+                #warn Dumper($server);
+                foreach my $plugin (@PLUGINS)
                 {
-                    $server->command($command);
+                    foreach my $command ($plugin->heartbeat_res($server->{address}))
+                    {
+                        Irssi::print("got '$command' from ". ref $plugin) if $command;
+                        $server->command($command) if $command;
+                    }
                 }
             }
-        }
-    };
-    Irssi:print($@) if $@;
+        };
+        Irssi:print($@) if $@;
+    } else {
+        Irssi::print("not passing heartbeats to plugins because not connected");
+    }
 
 }, undef);
 
