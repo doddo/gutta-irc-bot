@@ -12,8 +12,8 @@ sub new
     my $self = bless {
                 data => {},
             datafile => undef,
-     heartbeat_act_s => 58, # default act on heartbeats ~ every 58 secs.
-    heartbeat_act_ts => int(rand(10)), 
+     heartbeat_act_s => 58,   # default act on heartbeats ~ every 58 secs.
+    heartbeat_act_ts => time, # Setting timestamp "time is now"
     }, $class;
     $self->_initialise();
     warn "creating new class\n";
@@ -71,7 +71,7 @@ sub _heartbeat_act
     # this function, but the mechanics for *when* to act 
     # pretty much should be the same
     #
-    # This is a void function. Data collected here
+    # This is a "void" function. --  Data collected here
     # gets returned by called from heartbeat_res for every connected
     # to server
     

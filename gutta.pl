@@ -32,7 +32,7 @@ $VERSION = '0.1';
     license => 'GPL',
 );
 
-sub process_message 
+sub process_msg
 {
     my $server = shift;
     my $msg = shift;
@@ -41,20 +41,15 @@ sub process_message
     my $target = shift;
     my $save;
     
-    if ($msg =~ m/!plugins/)
-    {
-        $server->command("msg $target INSTALLED PLUGINS:");
-        $server->command("msg $target " . ref $_) foreach plugins();
-        return;
-    }
-
     foreach my $plugin (@PLUGINS) 
     {
-        foreach($plugin->process_msg($msg, $nick))
+        foreach my $command ($plugin->process_msg($msg, $nick, $mask, $target))
         {
-            next if not $_;
-            warn("calling plugin $plugin");
-            $server->command("msg $target " . $_); 
+            if ($command)
+            {
+                Irssi::print("running command: '$command' on behalf of " . ref $plugin);
+                $server->command($command); 
+            }
         }
     }
 }
@@ -67,13 +62,16 @@ Irssi::signal_add_last('message public', sub {
     my $target = shift;
     Irssi::signal_continue($server, $msg, $nick, $mask, $target);
     eval {
-        process_message($server, $msg, $nick, $mask, $target) if $nick ne $server->{nick};
+        process_msg($server, $msg, $nick, $mask, $target) if $nick ne $server->{nick};
     };
     warn ($@) if $@;
 });
 
 Irssi::timeout_add(2142, sub { 
-    Irssi::print("heartbeat from gutta");
+    # This will call plugins heartbeats method  on a 2142 ms interval.
+    # then for each connected server, it will call heartbeat_res -
+    # method, and execute what ever command the plugin returned.
+    #Irssi::print("heartbeat from gutta");
     
     if (Irssi::servers())
     {
@@ -101,7 +99,6 @@ Irssi::timeout_add(2142, sub {
     }
 
 }, undef);
-
 
 
 =pod

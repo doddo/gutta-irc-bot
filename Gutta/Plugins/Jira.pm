@@ -8,7 +8,6 @@ use LWP::UserAgent;
 use XML::FeedPP;
 use MIME::Base64;
 use JSON;
-use XML::Feed;
 use strict;
 use warnings;
 use Data::Dumper;
@@ -63,22 +62,26 @@ sub process_msg
 {
     my $self = shift;
     my $msg = shift;
+    my $nick = shift;
+    my $mask = shift;
+    my $target = shift;
+ 
     return undef unless $msg;
     # word boundries does not seem to work???
     if ($msg =~ /([A-Z]{3,30}-[0-9]{1,7})/) 
     { 
-       return "unset url." unless $self->{data}{'url'};
-       return $self->get_jira_issue($1);
+       return "msg ${target} unset url." unless $self->{data}{'url'};
+       return "msg ${target} " . $self->get_jira_issue($1);
     } elsif ($msg =~ /!jira set (username|password|url)=(\S+)\b/ ) {
         # TODO: this will be replaced at later time
         $self->{data}{$1} = $2;
         $self->save();
-        return "OK - [$1] set to [$2]";
+        return "msg ${target} OK - [$1] set to [$2]";
     } elsif ($msg =~ /!jira feed/){
-        return $self->__setup_jira_feed(split(/\s+/,$msg));
+        return "msg ${target} " . $self->__setup_jira_feed(split(/\s+/,$msg));
     } elsif ($msg =~ /!jira Dump/ ) {
         # TODO: fix this 
-        return Dumper($self->{data});
+        warn Dumper($self->{data});
     } else { 
        return undef;
     }

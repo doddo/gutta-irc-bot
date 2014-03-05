@@ -9,10 +9,14 @@ sub process_msg
 {
     my $self = shift;
     my $msg = shift;
-    
+    my $nick = shift;
+    my $mask = shift;
+    my $target = shift;
+
+
     if ($msg =~ /^\s*!ibood/)
     { 
-       return $self->ibood();
+       return "msg $target " . $self->ibood();
     } else { 
        return undef;
     }

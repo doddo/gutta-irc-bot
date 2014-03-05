@@ -7,11 +7,13 @@ sub process_msg
 {
     my $self = shift;
     my $msg = shift;
-    
+    my $nick = shift;
+    my $mask = shift;
+    my $target = shift;
 
     if ($msg =~ m/^!slap\s+(\S+)/)
     { 
-       return "$1 got slapped around a bit with a large trout.";
+       return "action $target slaps $1 around a bit with a large trout.";
     } else { 
        return ();
     }
