@@ -14,13 +14,12 @@ use strict;
 use warnings;
 use Irssi;
 use vars qw($VERSION %IRSSI);
-
-use Module::Pluggable search_path => "Gutta::Plugins",
-                      instantiate => 'new';
+use Data::Dumper;
 use File::Basename;
 chdir(dirname(__FILE__));
 
-use Data::Dumper;
+use Module::Pluggable search_path => "Gutta::Plugins",
+                      instantiate => 'new',
 
 my @PLUGINS  = plugins();
 
@@ -39,16 +38,35 @@ sub process_msg
     my $nick = shift;
     my $mask = shift;
     my $target = shift;
-    my $save;
-    
-    foreach my $plugin (@PLUGINS) 
+
+    foreach my $plugin (@PLUGINS)
     {
         foreach my $command ($plugin->process_msg($msg, $nick, $mask, $target))
         {
             if ($command)
             {
                 Irssi::print("running command: '$command' on behalf of " . ref $plugin);
-                $server->command($command); 
+                $server->command($command);
+            }
+        }
+    }
+}
+
+sub process_privmsg
+{
+    my $server = shift;
+    my $msg = shift;
+    my $nick = shift;
+    my $address = shift;
+
+    foreach my $plugin (@PLUGINS)
+    {
+        foreach my $command ($plugin->process_privmsg($msg, $nick, $address)
+        {
+            if ($command)
+            {
+                Irssi::print("running command: '$command' on behalf of " . ref $plugin);
+                $server->command($command);
             }
         }
     }
@@ -67,12 +85,25 @@ Irssi::signal_add_last('message public', sub {
     warn ($@) if $@;
 });
 
-Irssi::timeout_add(2142, sub { 
+Irssi::signal_add_last('message private', sub {
+    #  "message private", SERVER_REC, char *msg, char *nick, char *address
+    my $server = shift;
+    my $msg = shift;
+    my $nick = shift;
+    my $address= shift;
+    Irssi::signal_continue($server, $msg, $nick, $address);
+    eval {
+        process_privmsg($server, $msg, $nick, $address);
+    };
+    warn ($@) if $@;
+});
+
+Irssi::timeout_add(2142, sub {
     # This will call plugins heartbeats method  on a 2142 ms interval.
     # then for each connected server, it will call heartbeat_res -
     # method, and execute what ever command the plugin returned.
     #Irssi::print("heartbeat from gutta");
-    
+
     if (Irssi::servers())
     {
         eval {
@@ -99,12 +130,3 @@ Irssi::timeout_add(2142, sub {
     }
 
 }, undef);
-
-
-=pod
-Irssi::signal_add_last('message own_public', sub {
-    my ($server, $msg, $target) = @_;
-    Irssi::signal_continue($server, $msg, $target);
-    process_message($server, $msg,$target);
-});
-=cut

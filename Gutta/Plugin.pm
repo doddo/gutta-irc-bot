@@ -1,9 +1,9 @@
 package Gutta::Plugin;
+use Gutta::DBI;
 use Storable;
 use strict;
 use warnings;
 use DateTime;
-
 
 sub new 
 {
@@ -14,13 +14,23 @@ sub new
             datafile => undef,
      heartbeat_act_s => 58,   # default act on heartbeats ~ every 58 secs.
     heartbeat_act_ts => time, # Setting timestamp "time is now"
+                  db => Gutta::DBI->instance(),
     }, $class;
     $self->_initialise();
     warn "creating new class\n";
     return $self;
 }
 
+
+
 sub process_msg
+{
+    #  process incoming messages
+    my $self = shift;
+    return ();
+}
+
+sub process_privmsg
 {
     #  process incoming messages
     my $self = shift;
@@ -74,9 +84,6 @@ sub _heartbeat_act
     # This is a "void" function. --  Data collected here
     # gets returned by called from heartbeat_res for every connected
     # to server
-    
-
-
 }
 
 
@@ -90,5 +97,50 @@ sub heartbeat_res
     return undef;
 }
 
+sub dbh
+{
+    # Here we supply the database handle for gutta
+    #
+    my $self = shift;
+    return $self->{db}->dbh();
+}
+
+sub _dbinit
+{
+    # DBinit provides support for plugins to initialise their db:s, 
+    # they set dbinit and pass an "target_table" to it, and then this function will
+    # check too see whether that table exists, or else create it with the sql returned by
+    # the $self->setup_shema() class.
+    # this can be called multiple times by passing different tables to setup_schema
+    my $self = shift;
+    my $target_table = shift || $self->{target_table};
+    my $table;
+    
+    my $dbh = $self->dbh();
+
+    my $sth = $dbh->prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?");
+    $sth->execute($target_table);
+
+    print "found table $table\n" while ($table = $sth->fetchrow_array());
+    
+    if ($sth->rows == 0)
+    {
+        warn "Running SQL for $target_table\n";
+        my $sth = $dbh->prepare($self->_setup_shema($target_table)) or die "unable to do " , $self->_setup_shema($target_table) , ":$!\n";
+        $sth->execute() or die "unable to do " , $self->_setup_shema($target_table) , ":$!\n"; 
+    }
+
+}
+
+sub _setup_shema
+{
+    my $self = shift;
+    my $target_shema = shift;
+    #
+    # Child Plugins override this method to return the SQL needed to initialise the $target_shema
+    # table.
+    # It can be arbitrary SQL in here, so use with caution-
+    #
+}
 
 1;

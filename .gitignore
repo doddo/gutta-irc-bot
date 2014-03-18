@@ -2,3 +2,4 @@
 plugindemo.pl
 test*.pl
 *.swp
+*.db
