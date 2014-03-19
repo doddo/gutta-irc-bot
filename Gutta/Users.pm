@@ -47,7 +47,7 @@ sub _setup_shema
     my $self = shift;
     return <<EOM
     CREATE TABLE users   (
-              username TEXT PRIMARY KEY,
+                  nick TEXT PRIMARY KEY,
               password TEXT NOT NULL,
                  email TEXT,
                   salt INTEGER NOT NULL,
@@ -96,35 +96,36 @@ sub useradd
 {
     # add new user
     my $self = shift;
-    my $username = shift;
+    my $nick = shift;
     my $password = shift;
     my $email = shift;
     my $salt = "Bamse";
     my $dbh = $self->dbh();    
 
     my $sth = $dbh->prepare(qq{
-        INSERT INTO users (username, password, email, salt, created, last_password_change)
+        INSERT INTO users (nick, password, email, salt, created, last_password_change)
           VALUES (?,?,?,?,?,?)});
-    $sth->execute($username, $self->_hash($password, $salt), $email, $salt, time, time) or warn ("uanble to add user $username :$!\n");
-
+    $sth->execute($nick, $self->_hash($password, $salt), $email, $salt, time, time) or warn ("uanble to add user $nick :$!\n") or return "unable to add the user ... $!";
+    
+    return "OK - added $nick with $email."
 }
 
 sub userdel
 {
     # del a user
     my $self = shift;
-    my $username = shift;
+    my $nick = shift;
     my $dbh = $self->dbh();    
 
     my $sth = $dbh->prepare(qq{DELETE FROM users where name = ?});
-    $sth->execute($username);
+    $sth->execute($nick);
 }
 
 sub usermod
 {
     # A little ugly this one
     my $self = shift;
-    my $username = shift;
+    my $nick = shift;
 
     my @changes=@_;
     # TODO: implement this
@@ -137,13 +138,13 @@ sub passwd
     # set new password, but NOT validate the old one (because thats going to happen in the auth module)
     # Maybe next versuib will support this.   
     my $self = shift;
-    my $username = shift;
+    my $nick = shift;
     my $password = shift;
     my $salt = "TODO";
     my $dbh = $self->dbh();    
 
-    my $sth = $dbh->prepare(qq{UPDATE users SET password = ?, salt = ? WHERE username = ?});
-    $sth->execute($self->_hash($password, $salt), $salt, $username);
+    my $sth = $dbh->prepare(qq{UPDATE users SET password = ?, salt = ? WHERE nick = ?});
+    $sth->execute($self->_hash($password, $salt), $salt, $nick);
     return $?;
 }
 
@@ -151,26 +152,34 @@ sub get_user
 {
     # returns user
     my $self = shift;
-    my $username = shift;
+    my $nick = shift;
     my $dbh = $self->dbh();    
 
-    my $sth = $dbh->prepare(qq{SELECT email, created FROM users WHERE username = ?});
-    $sth->execute($username);
+    my $sth = $dbh->prepare(qq{SELECT nick, email, created, salt, password FROM users WHERE nick = ?});
+    $sth->execute($nick);
 
-    return $sth->fetchall_hashref('username');
+    my $userdata =  $sth->fetchall_hashref('nick');
+
+    return undef if $sth->rows == 0;
+    return $userdata;
+    
+
 }
 
 sub get_users
 {
     # returns user
     my $self = shift;
-    my $username = shift;
+    my $nick = shift;
     my $dbh = $self->dbh();    
 
-    my $sth = $dbh->prepare(qq{SELECT username, email, created FROM users});
+    my $sth = $dbh->prepare(qq{SELECT nick, email, created FROM users});
     $sth->execute();
 
-    return $sth->fetchall_hashref('username');
+    my $userdata =  $sth->fetchall_hashref('nick');
+
+    return undef if $sth->rows == 0;
+    return $userdata;
 }
 
 1;

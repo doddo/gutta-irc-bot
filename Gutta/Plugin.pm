@@ -126,8 +126,8 @@ sub _dbinit
     if ($sth->rows == 0)
     {
         warn "Running SQL for $target_table\n";
-        my $sth = $dbh->prepare($self->_setup_shema($target_table)) or die "unable to do " , $self->_setup_shema($target_table) , ":$!\n";
-        $sth->execute() or die "unable to do " , $self->_setup_shema($target_table) , ":$!\n"; 
+        my $sth = $dbh->prepare($self->_setup_shema($target_table)) or die "unable to do $target_table" , $self->_setup_shema($target_table) , ":$!\n";
+        $sth->execute() or die "unable to do $target_table " , $self->_setup_shema($target_table) , ":$!\n"; 
     }
 
 }
