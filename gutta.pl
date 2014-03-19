@@ -16,10 +16,10 @@ use Irssi;
 use vars qw($VERSION %IRSSI);
 use Data::Dumper;
 use File::Basename;
-chdir(dirname(__FILE__));
 
+chdir(dirname(__FILE__));
 use Module::Pluggable search_path => "Gutta::Plugins",
-                      instantiate => 'new',
+                      instantiate => 'new';
 
 my @PLUGINS  = plugins();
 
@@ -61,7 +61,7 @@ sub process_privmsg
 
     foreach my $plugin (@PLUGINS)
     {
-        foreach my $command ($plugin->process_privmsg($msg, $nick, $address)
+        foreach my $command ($plugin->process_privmsg($msg, $nick, $address))
         {
             if ($command)
             {
