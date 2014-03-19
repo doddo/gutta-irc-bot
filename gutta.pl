@@ -23,6 +23,8 @@ use Module::Pluggable search_path => "Gutta::Plugins",
 
 my @PLUGINS  = plugins();
 
+warn "loaded plugin ", ref $_ foreach @PLUGINS;
+
 $VERSION = '0.1';
 %IRSSI = (
     authors => 'Petter H',
@@ -90,7 +92,8 @@ Irssi::signal_add_last('message private', sub {
     my $server = shift;
     my $msg = shift;
     my $nick = shift;
-    my $address= shift;
+    my $address = shift;
+    Irssi::print(join " ", ($server, $msg, $nick, $address));
     Irssi::signal_continue($server, $msg, $nick, $address);
     eval {
         process_privmsg($server, $msg, $nick, $address);
