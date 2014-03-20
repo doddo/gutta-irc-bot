@@ -4,8 +4,19 @@ use strict;
 use warnings;
 use threads;
 use Gutta::DBI;
+use Data::Dumper;
 
-# This is a dispatcher STUB
+use Module::Pluggable search_path => "Gutta::Plugins",
+                      instantiate => 'new';
+
+
+my @PLUGINS = plugins();
+my %PLUGINS = map { ref $_ => $_ } @PLUGINS;
+
+
+print join "\n", keys %PLUGINS;
+
+# This is  the Gutta abstraction layer.
 # #
 #
 #  This will be the glue between the irc and the plugins
@@ -14,7 +25,6 @@ use Gutta::DBI;
 #
 
 $|++;
-
 
 sub new 
 {
@@ -29,32 +39,36 @@ sub new
 
 }
 
-sub dispatch
+sub start_workers
 {
     my $self = shift;
     my @fwords = qw/& ! @ $ ^ R 5 ¡ £ +/;     
     my %thr;
 
-    while (my $char = shift(@fwords))
+    #while (my $char = shift(@fwords))
+    foreach (keys %PLUGINS)
     {
-        print "starting thread $char.\n";
-        $thr{$char} = threads->create({void => 1}, \&gutta_worker, $char);
+        print "starting thread $_";
+        $thr{$_} = threads->create({void => 1}, \&gutta_worker, $self, $_);
     }
-
 }
 
 sub gutta_worker
 {
-
+    my $self = shift;
     my $char = shift;
+
+    print "starting thread $char . \n";
     my $nextsleep = 1;
 
-    while (sleep $nextsleep)
+    while (sleep int(rand(2)) + 1)
     {
-        $nextsleep = int(rand(2)) + 1;
         print $char;
-        
     }
 }
 
+
+
+
 1;
+

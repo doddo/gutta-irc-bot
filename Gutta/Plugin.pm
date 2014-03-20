@@ -108,27 +108,16 @@ sub dbh
 sub _dbinit
 {
     # DBinit provides support for plugins to initialise their db:s, 
-    # they set dbinit and pass an "target_table" to it, and then this function will
-    # check too see whether that table exists, or else create it with the sql returned by
+    # it runs the sql from the _setup_shema method
     # the $self->setup_shema() class.
     # this can be called multiple times by passing different tables to setup_schema
     my $self = shift;
-    my $target_table = shift || $self->{target_table};
-    my $table;
-    
     my $dbh = $self->dbh();
 
-    my $sth = $dbh->prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?");
-    $sth->execute($target_table);
+    my $query = $self->_setup_shema() || return;
 
-    print "found table $table\n" while ($table = $sth->fetchrow_array());
-    
-    if ($sth->rows == 0)
-    {
-        warn "Running SQL for $target_table\n";
-        my $sth = $dbh->prepare($self->_setup_shema($target_table)) or die "unable to do $target_table" , $self->_setup_shema($target_table) , ":$!\n";
-        $sth->execute() or die "unable to do $target_table " , $self->_setup_shema($target_table) , ":$!\n"; 
-    }
+    my $sth = $dbh->prepare($query) or die "unable to run: $query\n";
+    $sth->execute() or  die "unable to execute; $query\n";
 
 }
 
@@ -141,6 +130,7 @@ sub _setup_shema
     # table.
     # It can be arbitrary SQL in here, so use with caution-
     #
+    return undef;
 }
 
 1;

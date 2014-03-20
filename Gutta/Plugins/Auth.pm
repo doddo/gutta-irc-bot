@@ -26,9 +26,7 @@ then they can identify, have different access levels or what ever.
 
 some commands should only be run by "trusted" people, and this is to prevent untrusted users from abusing guttas power.
 
-
 =cut
-
 
 
 sub _initialise
@@ -161,8 +159,8 @@ sub _setup_shema
 {
     my $self = shift;
     return <<EOM
-    CREATE TABLE sessions (
-            nick TEXT NOT NULL PRIMARY KEY,
+    CREATE TABLE IF NOT EXISTS sessions (
+                nick TEXT NOT NULL PRIMARY KEY,
                 mask TEXT NOT NULL,
       session_expire INT NOT NULL,
     FOREIGN KEY(nick) REFERENCES users(nick)

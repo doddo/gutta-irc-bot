@@ -42,45 +42,31 @@ sub dbh
 
 }
 
-sub _setup_shema 
-{
-    my $self = shift;
-    return <<EOM
-    CREATE TABLE users   (
-                  nick TEXT PRIMARY KEY,
-              password TEXT NOT NULL,
-                 email TEXT,
-                  salt INTEGER NOT NULL,
-               created INTEGER NOT NULL,
-            last_login INTEGER, 
-  last_password_change INTEGER  )
-
-EOM
-;
-}
-
 sub _dbinit
 {
-    # make sure table exists, or else create a new one.
+    # DBinit provides support for to initialise their db:s, 
+    # it runs the sql from the _setup_shema method
+    # the $self->setup_shema() class.
+    # this can be called multiple times by passing different tables to setup_schema
     my $self = shift;
-    my $primary_table = shift || $self->{primary_table};
-    my $table;
-    
     my $dbh = $self->dbh();
 
-    my $sth = $dbh->prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?");
-    $sth->execute($primary_table);
-
-    print "found table $table\n" while ($table = $sth->fetchrow_array());
-    
-    if ($sth->rows == 0)
-    {
-        warn "creating table for $primary_table\n";
-        my $sth = $dbh->prepare($self->_setup_shema()) or die "unable to do " , $self->_setup_shema() , ":$!\n";
-        $sth->execute() or die "unable to do " , $self->_setup_shema() , ":$!\n"; 
+    my $query = qq{
+            CREATE TABLE IF NOT EXISTS users   (
+                          nick TEXT PRIMARY KEY,
+                      password TEXT NOT NULL,
+                         email TEXT,
+                          salt INTEGER NOT NULL,
+                       created INTEGER NOT NULL,
+                    last_login INTEGER, 
+          last_password_change INTEGER  )
     }
 
+    my $sth = $dbh->prepare($query) or die "unable to run: $query\n";
+    $sth->execute() or  die "unable to execute; $query\n";
 }
+
+
 
 sub _hash
 {
@@ -89,7 +75,6 @@ sub _hash
     my $salt = shift;
 
     return unix_md5_crypt($password,  $salt);
-   
 }
 
 sub useradd
