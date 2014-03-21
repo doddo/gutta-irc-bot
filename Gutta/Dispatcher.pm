@@ -35,9 +35,55 @@ sub new
     primary_table => 'users'
     }, $class;
 
-    return $self;
+    $self->{triggers} = $self->_get_triggers();
+    $self->{commands} = $self->_get_commands();
 
+    return $self;
 }
+
+
+sub _get_triggers
+{
+    # Get the triggers for the plugins and put them on a hash.
+    # The triggers are regular expressions mapped to functions in the 
+    # plugins.
+    my $self = shift;
+    
+    my %triggers; 
+
+    foreach my $plugin_key (keys %PLUGINS)
+    {
+        next unless $PLUGINS{$plugin_key}->can('get_triggers');
+        $triggers{$plugin_key} = $PLUGINS{$plugin_key}->get_triggers();
+    }
+
+    return \%triggers;
+}
+
+sub _get_commands
+{
+    # Get the commands for the plugins and put them on a hash.
+    # The commands are the first part of a message and has a custom
+    # prefix or something.
+    # 
+    my $self = shift;
+    
+    my %commands; 
+
+    foreach my $plugin_key (keys %PLUGINS)
+    {
+        next unless $PLUGINS{$plugin_key}->can('get_commands');
+        $commands{$plugin_key} = $PLUGINS{$plugin_key}->get_commands();
+    }
+
+    return \%commands;
+}
+
+
+
+
+
+
 
 sub start_workers
 {
@@ -66,8 +112,6 @@ sub gutta_worker
         print $char;
     }
 }
-
-
 
 
 1;
