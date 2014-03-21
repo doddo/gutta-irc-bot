@@ -60,7 +60,7 @@ sub _dbinit
                        created INTEGER NOT NULL,
                     last_login INTEGER, 
           last_password_change INTEGER  )
-    }
+    };
 
     my $sth = $dbh->prepare($query) or die "unable to run: $query\n";
     $sth->execute() or  die "unable to execute; $query\n";
