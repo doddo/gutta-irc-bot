@@ -3,6 +3,7 @@ package Gutta::Dispatcher;
 use strict;
 use warnings;
 use threads;
+#use Thred::Queue;
 use Gutta::DBI;
 use Data::Dumper;
 
@@ -12,6 +13,8 @@ use Module::Pluggable search_path => "Gutta::Plugins",
 
 my @PLUGINS = plugins();
 my %PLUGINS = map { ref $_ => $_ } @PLUGINS;
+
+#my $cmdq = Thread::Queue->new();
 
 
 print join "\n", keys %PLUGINS;

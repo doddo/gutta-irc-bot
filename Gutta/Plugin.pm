@@ -16,12 +16,11 @@ sub new
     heartbeat_act_ts => time, # Setting timestamp "time is now"
                   db => Gutta::DBI->instance(),
     }, $class;
+
     $self->_initialise();
     warn "creating new class\n";
     return $self;
 }
-
-
 
 sub process_msg
 {
@@ -41,7 +40,85 @@ sub _initialise
 {
     # called when plugin is istansiated
     my $self = shift;
+    $self->{triggers} = $self->_set_triggers();
+    $self->{commands} = $self->_get_commands();
+
     $self->{datafile} = "Gutta/Data/" . __PACKAGE__ . ".data",
+}
+
+sub trigger
+{
+    my $self = shift;
+    my $trigger = shift;
+
+    # DO IT (something like this)
+    #
+    $self->{triggers} ||= $self->_set_triggers();
+    return unless $self->{triggers};
+
+    return $self->{triggers}{$trigger}->(@_);
+}
+
+sub command
+{
+    my $self = shift;
+    my $command = shift;
+
+    # DO IT (something like this)
+    #
+    $self->{commands} ||= $self->_set_commands();
+    return unless $self->{commands};
+
+    return $self->{commands}{$command}->(@_);
+}
+
+
+
+sub _get_triggers
+{
+    my $self = shift;
+    # override this in plugin to set custom triggers
+    #
+    # The dispatch table for "triggers" which will be triggered
+    # when one of them matches the IRC message.
+
+
+    return $self->{triggers};
+}
+
+sub _get_commands
+{
+    my $self = shift;
+    # override this in plugin to set custom commands
+    #
+    # The dispatch table for "commands", which is the first word sent to Gutta
+    # it may be prefixed with $CMDPREFIX in parent, depending on context:
+    #  (private vs public msg)
+    #
+    return $self->{commands};
+}
+
+sub _set_triggers
+{
+    my $self = shift;
+    # override this in plugin to set custom triggers
+    #
+    # The dispatch table for "triggers" which will be triggered
+    # when one of them matches the IRC message.
+
+    return {};
+}
+
+sub _set_commands
+{
+    my $self = shift;
+    # override this in plugin to set custom commands
+    #
+    # The dispatch table for "commands", which is the first word sent to Gutta
+    # it may be prefixed with $CMDPREFIX in parent, depending on context:
+    #  (private vs public msg)
+    #
+    return {};
 }
 
 sub load
@@ -65,7 +142,6 @@ sub heartbeat
     # the plugins can handle heartbeats to act upon things outside of the irssi
     my $self = shift;
     my $nowt = time;
-
 
     if (($nowt - $self->{heartbeat_act_ts}) >= $self->{heartbeat_act_s})
     {
@@ -104,6 +180,8 @@ sub dbh
     my $self = shift;
     return $self->{db}->dbh();
 }
+
+
 
 sub _dbinit
 {
