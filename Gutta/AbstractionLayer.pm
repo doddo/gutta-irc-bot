@@ -83,8 +83,10 @@ sub _load_triggers
         next unless $plugin->can('_triggers');
         if (my $t = $plugin->_triggers())
         {    
-            printf "loaded %i triggers for %s\n", scalar keys %{$t}, $plugin_key;
+            warn sprintf "loaded %i triggers for %s\n", scalar keys %{$t}, $plugin_key;
             $triggers{$plugin_key} = $t
+        } else {
+            warn sprintf "loaded 0 commands for %s\n", $plugin_key;
         }
     }
 
@@ -106,8 +108,10 @@ sub _load_commands
         next unless $plugin->can('_commands');
         if (my $t = $plugin->_commands())
         {    
-            printf "loaded %i commands for %s\n", scalar keys %{$t}, $plugin_key;
+            warn sprintf "loaded %i commands for %s\n", scalar keys %{$t}, $plugin_key;
             $commands{$plugin_key} = $t;
+        } else {
+            warn sprintf "loaded 0 commands for %s\n", $plugin_key;
         }
     }
 
@@ -144,6 +148,14 @@ sub gutta_worker
 
 sub process_msg
 {
+    #
+    #  process incoming message $msg (rest is "context" ;)
+    #  return an array of responses from the plugins
+    #  the responses are pure IRC commands.
+    #  
+    #  Several plugins may respond (diffrently) to the same
+    #  message. 
+    #
     my $self = shift;
     my $server = shift; # the IRC server
     my $msg = shift;    # The message
@@ -154,6 +166,11 @@ sub process_msg
                                # bcz privmsgs have no #channel, but should
                                # get the response instead,
     my $cmdprefix = qr/gutta[,:]/; #TODO FIX    
+    my @responses; # return this.
+
+    # 
+    # Process Commands
+    #
 
     # check first: is it a commandprefix?, then: match potential_command with
     # all the plugins commands.
@@ -168,13 +185,38 @@ sub process_msg
             # has plugin $plugin_ref a defined command which match?
             if (exists $$commands{$command})
             {
-                print "BINGO FOR $plugin_ref @ $command\n";
-                my $response = $PLUGINS{$plugin_ref}->command($command,$server,$msg,$nick,$mask,$target);
-                print "$response\n"; 
-            } else {
-                print "VILSE I KATLAGROTTAN met $command\n";       
-            }
+                warn "BINGO FOR $plugin_ref @ $command\n";
+                # TODO: THIS COULD BE STARTED IN A THREAD AND/OR INSERTED INTO THE DB:
+                push @responses, $PLUGINS{$plugin_ref}->command($command,$server,$msg,$nick,$mask,$target);
+            } 
+              
         }
     }
+    
+    # 
+    # Process Triggers
+    #
+
+    # get all triggers for all plugins.
+    while (my ($plugin_ref, $triggers) = each $self->get_triggers)
+    {
+        # traverse through all configured triggers (they are regular expressions)
+        # and match against incoming message $msg. Any matches - they can be run in
+        # plugin containing that trigger.
+        foreach my $regex_trigger (keys %{$triggers})
+        {
+            if ($msg  =~ /$regex_trigger/)
+            {
+                # Here a regex matched. That was from $plugin_ref.
+                warn sprintf 'trigger "%s" matched "%s" for plugin %s.', $regex_trigger, $&, $plugin_ref;
+                
+                # TODO: THIS COULD BE STARTED IN A THREAD AND/OR INSERTED INTO THE DB:
+                push @responses, $PLUGINS{$plugin_ref}->trigger($regex_trigger,$server,$msg,$nick,$mask,$target, $&);
+            }
+        } 
+    }
+    warn "FOUND NOTHING\n";
+    warn "server:$server,msg:$msg,nick:$nick,mask:$mask,targtt:$target\n";
+    return @responses;
 }
 1;

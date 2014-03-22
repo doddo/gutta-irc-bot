@@ -1,12 +1,12 @@
-# == WHAT
-# irssi bot "Gutta". main plugin. load this into irssi.
 #
+# This is guttas Irssi interface.
+# it speaks through the Gutta::AbstractionLayer with  plugins
+# and sends processed responses to irssi.
 #
 # == INSTALL
 # Save the whole thing under ~/.irssi/scripts/ and then  you can
 # load it from irssi.
 # 
-
 
 use strict;
 use warnings;
@@ -14,14 +14,10 @@ use Irssi;
 use vars qw($VERSION %IRSSI);
 use Data::Dumper;
 use File::Basename;
-
 chdir(dirname(__FILE__));
-use Module::Pluggable search_path => "Gutta::Plugins",
-                      instantiate => 'new';
+use Gutta::AbstractionLayer;
 
-my @PLUGINS  = plugins();
-
-warn "loaded plugin ", ref $_ foreach @PLUGINS;
+my $gal = Gutta::AbstractionLayer->new();
 
 $VERSION = '0.1';
 %IRSSI = (
@@ -33,42 +29,26 @@ $VERSION = '0.1';
 
 sub process_msg
 {
-    my $server = shift;
-    my $msg = shift;
-    my $nick = shift;
-    my $mask = shift;
-    my $target = shift;
-
-    foreach my $plugin (@PLUGINS)
+    my $server = shift; # the IRC server
+    my $msg = shift;    # The message
+    my $nick = shift;   # who sent it?
+    my $mask = shift;   # the hostmask of who sent it
+    my $target = shift||$nick; # for privmsgs, the target (a channel)
+ 
+    my @irc_cmds = $gal->process_msg(
+        $server,
+        $msg, 
+        $nick, 
+        $mask,  
+        $target, 
+    );
+    Irssi::print  Dumper(@irc_cmds);
+    Irssi::print "a new message have arrived.";
+    Irssi::print join (" ", @_);
+    foreach my $irc_cmd (@irc_cmds)
     {
-        foreach my $command ($plugin->process_msg($msg, $nick, $mask, $target))
-        {
-            if ($command)
-            {
-                Irssi::print("running command: '$command' on behalf of " . ref $plugin);
-                $server->command($command);
-            }
-        }
-    }
-}
-
-sub process_privmsg
-{
-    my $server = shift;
-    my $msg = shift;
-    my $nick = shift;
-    my $address = shift;
-
-    foreach my $plugin (@PLUGINS)
-    {
-        foreach my $command ($plugin->process_privmsg($msg, $nick, $address))
-        {
-            if ($command)
-            {
-                Irssi::print("running command: '$command' on behalf of " . ref $plugin);
-                $server->command($command);
-            }
-        }
+        Irssi::print (sprintf 'trying %s', $irc_cmd);
+        $server->command($irc_cmd);
     }
 }
 
@@ -80,7 +60,7 @@ Irssi::signal_add_last('message public', sub {
     my $target = shift;
     Irssi::signal_continue($server, $msg, $nick, $mask, $target);
     eval {
-        process_msg($server, $msg, $nick, $mask, $target) if $nick ne $server->{nick};
+        process_msg($server, $msg, $nick, $mask, $target); # if $nick ne $server->{nick};
     };
     warn ($@) if $@;
 });
@@ -94,11 +74,11 @@ Irssi::signal_add_last('message private', sub {
     Irssi::print(join " ", ($server, $msg, $nick, $address));
     Irssi::signal_continue($server, $msg, $nick, $address);
     eval {
-        process_privmsg($server, $msg, $nick, $address);
+        process_msg($server, $msg, $nick, $address);
     };
     warn ($@) if $@;
 });
-
+=pod
 Irssi::timeout_add(2142, sub {
     # This will call plugins heartbeats method  on a 2142 ms interval.
     # then for each connected server, it will call heartbeat_res -
@@ -131,3 +111,4 @@ Irssi::timeout_add(2142, sub {
     }
 
 }, undef);
+=cut

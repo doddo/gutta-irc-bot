@@ -65,8 +65,15 @@ sub srank
 sub give_karma
 {
     my $self = shift;
-    my $godis = shift;
-    return "GIVE_KARMA $godis\n";
+    my $server = shift;
+    my $msg = shift;
+    my $nick = shift;
+    my $mask = shift;
+    my $target = shift;
+    my $match = shift;
+
+    return sprintf 'msg %s %s now has 666 points of coma', $target, $nick
+
 }
 
 

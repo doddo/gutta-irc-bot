@@ -31,7 +31,7 @@ my $target = "#test123123";
 my $d = Gutta::AbstractionLayer->new();
 
 
-my $r = $d->process_msg (
+my @r = $d->process_msg (
     $server,
     $msg,
     $nick,
@@ -39,5 +39,5 @@ my $r = $d->process_msg (
     $target,
 );
 
-print Dumper($r);
+print Dumper(@r);
 

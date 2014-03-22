@@ -202,11 +202,8 @@ sub command
 {
     my $self = shift;
     my $command = shift;
-    my $server = shift;
-    my $msg = shift;
-    my $nick = shift;
-    my $mask = shift;
-    my $target = shift;
+    # Left in @_ = $server, $msg, $nick, $mask, $target
+    # it will be passed on to the command
     # DO IT (something like this) = shift;
     #
     $self->{commands} ||= $self->_commands();
@@ -214,6 +211,22 @@ sub command
 
     return $self->{commands}{$command}->(@_);
 }
+
+sub trigger
+{
+    my $self = shift;
+    my $trigger = shift;
+    # Left in @_ = $server, $msg, $nick, $mask, $target, $match =  the match in $msg
+    # it will be passwed on to the trigger.
+    # DO IT (something like this) = shift;
+    #
+    $self->{triggers} ||= $self->_triggers();
+    return unless $self->{triggers};
+
+    
+    return $self->{triggers}{$trigger}->(@_);
+}
+
 
 
 1;
