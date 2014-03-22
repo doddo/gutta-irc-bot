@@ -1,14 +1,12 @@
 # == WHAT
-# All around bot "Gutta".
+# irssi bot "Gutta". main plugin. load this into irssi.
 #
-# == WHO
-# Based on "All around bot" by Jeroen Van den Bossche, 2012
-# Fork By PETTER H 2014
 #
 # == INSTALL
-# Save the whole thing under ~/.irssi/scripts/ and then run irssi, and /load gutta.pl
-# OR
-# Save it in ~/.irssi/scripts/autorun and (re)start Irssi
+# Save the whole thing under ~/.irssi/scripts/ and then  you can
+# load it from irssi.
+# 
+
 
 use strict;
 use warnings;
@@ -29,7 +27,7 @@ $VERSION = '0.1';
 %IRSSI = (
     authors => 'Petter H',
     name => 'gutta',
-    description => 'All around Irssi bots brother gutta.',
+    description => 'Guta bot',
     license => 'GPL',
 );
 
