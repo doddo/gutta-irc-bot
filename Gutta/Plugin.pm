@@ -40,8 +40,8 @@ sub _initialise
 {
     # called when plugin is istansiated
     my $self = shift;
-    $self->{triggers} = $self->_set_triggers();
-    $self->{commands} = $self->_get_commands();
+    $self->{triggers} = $self->_triggers();
+    $self->{commands} = $self->_commands();
 
     $self->{datafile} = "Gutta/Data/" . __PACKAGE__ . ".data",
 }
@@ -59,20 +59,6 @@ sub trigger
     return $self->{triggers}{$trigger}->(@_);
 }
 
-sub command
-{
-    my $self = shift;
-    my $command = shift;
-
-    # DO IT (something like this)
-    #
-    $self->{commands} ||= $self->_set_commands();
-    return unless $self->{commands};
-
-    return $self->{commands}{$command}->(@_);
-}
-
-
 
 sub _get_triggers
 {
@@ -81,7 +67,7 @@ sub _get_triggers
     #
     # The dispatch table for "triggers" which will be triggered
     # when one of them matches the IRC message.
-
+    $self->{triggers} ||= $self->_set_triggers();
 
     return $self->{triggers};
 }
@@ -98,7 +84,7 @@ sub _get_commands
     return $self->{commands};
 }
 
-sub _set_triggers
+sub _triggers
 {
     my $self = shift;
     # override this in plugin to set custom triggers
@@ -106,10 +92,10 @@ sub _set_triggers
     # The dispatch table for "triggers" which will be triggered
     # when one of them matches the IRC message.
 
-    return {};
+    return 
 }
 
-sub _set_commands
+sub _commands
 {
     my $self = shift;
     # override this in plugin to set custom commands
@@ -118,7 +104,7 @@ sub _set_commands
     # it may be prefixed with $CMDPREFIX in parent, depending on context:
     #  (private vs public msg)
     #
-    return {};
+    return ;
 }
 
 sub load
@@ -210,5 +196,24 @@ sub _setup_shema
     #
     return undef;
 }
+
+
+sub command
+{
+    my $self = shift;
+    my $command = shift;
+    my $server = shift;
+    my $msg = shift;
+    my $nick = shift;
+    my $mask = shift;
+    my $target = shift;
+    # DO IT (something like this) = shift;
+    #
+    $self->{commands} ||= $self->_commands();
+    return unless $self->{commands};
+
+    return $self->{commands}{$command}->(@_);
+}
+
 
 1;

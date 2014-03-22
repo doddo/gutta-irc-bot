@@ -14,29 +14,30 @@
 use strict;
 use warnings;
 
-use Module::Pluggable search_path => "Gutta::Plugins",
-                      instantiate => 'new';
 use File::Basename;
 chdir(dirname(__FILE__));
 
 use Data::Dumper;
+use Gutta::AbstractionLayer;
 
-
-my $nick = shift;
-my $target = shift;
+my $server = "server";
 my $msg = shift;
-my $mask = "";
+my $nick = "nickysthlm";
+my $mask = "*";
+my $target = "#test123123";
 
-my @PLUGINS  = plugins();
 
-    foreach my $plugin (@PLUGINS) 
-    {
-        foreach my $command ($plugin->process_msg($msg, $nick, $mask, $target))
-        {
-            if ($command)
-            {
-                print "$command\n";
-            }
-        }
-    }
+
+my $d = Gutta::AbstractionLayer->new();
+
+
+my $r = $d->process_msg (
+    $server,
+    $msg,
+    $nick,
+    $mask,
+    $target,
+);
+
+print Dumper($r);
 

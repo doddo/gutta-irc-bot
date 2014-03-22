@@ -9,11 +9,6 @@ sub _initialise
 {
     my $self = shift;
     $self->_dbinit('karma');
-
-  #  $self->{triggers} = $self->_set_triggers();
-  #  $self->{commands} = $self->_set_commands();
-
-    print $self->trigger(qr/([a-z0-9_@.ÅÄÖåäö]+?)(\+\+|--)/,"godis");
 }
 
 sub _setup_shema 
@@ -21,26 +16,25 @@ sub _setup_shema
     my $self = shift;
     return <<EOM
     CREATE TABLE IF NOT EXISTS karma_table (
-                 item TEXT PRIMARY KEY,
-                 karma INTEGER DEFAULT 0
+            item TEXT PRIMARY KEY,
+            karma INTEGER DEFAULT 0
     );
 EOM
 ;
 }
 
-sub _set_triggers
+sub _triggers
 {
     # The dispatch table for "triggers" which will be triggered
     # when one of them matches the IRC message.
     my $self = shift;
-
 
     return {
         qr/([a-z0-9_@.ÅÄÖåäö]+?)(\+\+|--)/ => sub { $self->give_karma(@_) },
     };
 }
 
-sub _set_commands
+sub _commands
 {
     # The dispatch table for "commands", which is the first word sent to Gutta
     # it may be prefixed with $CMDPREFIX in parent, depending on context:
@@ -64,6 +58,7 @@ sub srank
 {
     my $self = shift;
     print "SRANK\n";
+    return "kalle koma now has X points of coma\n";
 
 }
 
@@ -73,7 +68,6 @@ sub give_karma
     my $godis = shift;
     return "GIVE_KARMA $godis\n";
 }
-
 
 
 1;
