@@ -34,7 +34,7 @@ This is to  be the glue between the irc and the plugins
 my @PLUGINS = plugins();
 my %PLUGINS = map { ref $_ => $_ } @PLUGINS;
 
-#my $cmdq = Thread::Queue->new();
+#my $heartbeat_mq = Thread::Queue->new();
 
 # print join "\n", keys %PLUGINS;
 
@@ -92,6 +92,30 @@ sub _load_triggers
 
     return \%triggers;
 }
+=pod
+
+sub heartbeat
+{
+    # 
+    # Gutta::AbstractionLayer does things with this heartbeat function.
+    #
+    #
+    my $self = shift;
+    return $self->{hertbeat} if $self->{heartbeat}
+    warn "Fireing up the heartbeat thread to interact with plugins\n";
+    # Start the heartbeat thread
+    $self->{heartbeat} =  threads->create({void => 1}, sub {
+        eval{
+            foreach my $plugin (@PLUGINS)
+            {
+               $plugin->heartbeat();
+            }
+        };
+        warn $@ if $@;
+        sleep 3;
+    }, $self, @_);
+}
+=cut
 
 sub _load_commands
 {

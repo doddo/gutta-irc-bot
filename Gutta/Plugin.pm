@@ -46,20 +46,6 @@ sub _initialise
     $self->{datafile} = "Gutta/Data/" . __PACKAGE__ . ".data",
 }
 
-sub trigger
-{
-    my $self = shift;
-    my $trigger = shift;
-
-    # DO IT (something like this)
-    #
-    $self->{triggers} ||= $self->_set_triggers();
-    return unless $self->{triggers};
-
-    return $self->{triggers}{$trigger}->(@_);
-}
-
-
 sub _get_triggers
 {
     my $self = shift;
@@ -226,7 +212,5 @@ sub trigger
     
     return $self->{triggers}{$trigger}->(@_);
 }
-
-
 
 1;
