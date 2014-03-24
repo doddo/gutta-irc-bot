@@ -9,17 +9,18 @@ use warnings;
 use Data::Dumper;
 use File::Basename;
 use IO::Socket;
-use Getopt::Long qw(GetOptionsFromArray);
+use Getopt::Long;
 chdir(dirname(__FILE__));
 use Gutta::AbstractionLayer;
 
-my $gal = Gutta::AbstractionLayer->new();
+my $gal = Gutta::AbstractionLayer->new(parse_response => 1);
 
 my $server;
-my $port;
+my $port = 6667;
 my $own_nick;
 my $channel;
 my $login;
+
 
 GetOptions (
     "server=s" => \$server,
@@ -29,36 +30,18 @@ GetOptions (
      "login=s" => \$login);
 
 
-sub parse_input
-{
-    #parses the input from the server.
-    #
-    #:doddo_!~doddo@localhost PRIVMSG #test123123 :doddo2000 (2)
-    #:irc.the.net 250 gutta :Highest connection count: 3 (9 connections received)  
-    #
-    $_ = shift;
-
-    m/^:([^:]+):(.+)$/;
-    my $context = $1;
-    my $msg = $2;
-
-     
-
-    my ($sender, $msgtype, $target) = split(" ", $context);
-    return ($sender, $msgtype, $target, $msg);
-}
-
-
 #
 
 #  MAIN
 #
 #
 
+$login||=$own_nick;
+
 my $sock = new IO::Socket::INET(PeerAddr => $server,
                                 PeerPort => $port,
                                 Proto => 'tcp') or
-                                    die "Can't connect\n";
+                                    die "Can't connect: $!\n";
 
 # Log on to the server.
 print $sock "NICK $own_nick\r\n";
@@ -78,49 +61,39 @@ while (my $input = <$sock>) {
 
 # Join the channel.
 print $sock "JOIN $channel\r\n";
+print "< JOIN $channel\r\n";
 
 
 # Keep reading lines from the server.
 while (my $input = <$sock>)
- {
+{
     chop $input;
-    if ($input =~ /^PING(.*)$/i) {
+    if ($input =~ /^PING(.*)$/i) 
+    {
+        print "PING? PONG\n"; 
         # We must respond to PINGs to avoid being disconnected.
         print $sock "PONG $1\r\n";
-    }
-    else {
+    } else {
         # Print the raw line received by the bot.
         print "> $input\n"; 
 
-        # parse the input and decide what to do
-
-        my  ($sender, $msgtype, $target, $msg) = parse_input($input);
-       
-        # check if it is from a user (nick!address)
-        my ($nick, $address) = split ('!', $sender);
-        
-
-        if ($nick and $msgtype eq "PRIVMSG" and $nick ne $own_nick)
+        # ITS A PRIVMSG 
+        if ($input =~ m/^:[^:]+ PRIVMSG/)
         {
-            # is the message from a nick?
-            #  (looks like this: "doddo_!~doddo@localhost"...)
-            #  
-            my @irc_cmds = $gal->process_msg(
-                $server,
-                $msg, 
-                $nick, 
-                $address,  
-                $target, 
-            );
-   
+            # PARSE THE PRIVMSG...
+            my ($msg, $nick, $mask, $target) = $gal->parse_privmsg($input);
+            warn "parsing fiald for $msg $nick $mask $target\n";
+
+            # ...and run resulting cmds (if any)
+            my @irc_cmds = $gal->process_msg($server, $msg, $nick, $mask, $target);       
             foreach my $irc_cmd (@irc_cmds)
             {
-                $irc_cmd =~ s/^msg (\S+) /PRIVMSG $1 :/i; #GOt TODO something about this
-                printf "< %s\r\n", $irc_cmd;
-                printf $sock "%s\r\n", $irc_cmd;
+                printf "< %s", $irc_cmd;
+                printf $sock "%s", $irc_cmd;
                 
             }
         }
+
     }
 }
 
