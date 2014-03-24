@@ -24,8 +24,8 @@ This is  the Gutta abstraction layer.
 This is to  be the glue between the irc and the plugins
 
 * to improve multitasking if some server is slow (by introducing threads and a message queue)
-* to enable gutta to hook into any irc client (not only Irssi)
-* to enable standalone mode (in the future)
+* to enable gutta to hook into "any" IRC client (not only Irssi)
+* to enable standalone mode
 
 
 =cut
@@ -44,10 +44,11 @@ $|++;
 sub new 
 {
     my $class = shift;
-
+    my %params = @_;
     my $self = bless {
                db => Gutta::DBI->instance(),
-    primary_table => 'users'
+    primary_table => 'users',
+   parse_response => $params{parse_response}
     }, $class;
 
     $self->{triggers} = $self->_load_triggers();
@@ -116,6 +117,60 @@ sub heartbeat
     }, $self, @_);
 }
 =cut
+
+sub _parse_response
+{
+    # Get the responses from the plugins,
+    # and make sure that they follow rfc2812 grammar spec
+    # 
+    #  ie:
+    #  msg #test123123 bla bla bla bla
+    #       becomes:
+    #  PRIVMSG #test123123 :bla bla bla bla
+    #
+    #  and:
+    #
+    #  action #test123123 kramar gutta
+    #       becomes:
+    #  PRIVMSG #test123123 :ACTION  kramar gutta
+    #
+    my $self = shift;
+    my @in_msgs = @_; # incoming messages from plugins
+    my @out_msgs; # return this
+
+    foreach my $msg (@in_msgs)
+    {
+       $msg =~ s/^msg (\S+) /PRIVMSG $1 :/i; 
+       $msg =~ s/^action (\S+) /PRIVMSG $1 :/i; 
+       $msg .= "\r\n";
+       push @out_msgs, $msg;
+    }
+
+    return @out_msgs;
+}
+
+sub parse_privmsg
+{
+    #parses the privmsg:s from the server and returns in a 
+    #format which gutta can understand.
+    #
+    #:doddo_!~doddo@localhost PRIVMSG #test123123 :doddo2000 (2)
+    #:irc.the.net 250 gutta :Highest connection count: 3 (9 connections received)  
+    #
+    my $self = shift;
+    $_ = shift;
+    
+    m/^:(?<nick>[^!]++)! # get the nick
+         (?<mask>\S++)\s  # Get the hostmask
+               PRIVMSG\s  # this is how we know its a PRIVMSG
+        (?<target>\S+)\s: # this is the target nick or chan
+              (?<msg>.+)$ # rest of line would be msg /x;
+     
+    return $+{msg}, $+{nick}, $+{mask}, $+{target};
+}
+
+
+
 
 sub _load_commands
 {
@@ -189,7 +244,7 @@ sub process_msg
                                # will be the nick instead. makes sense
                                # bcz privmsgs have no #channel, but should
                                # get the response instead,
-    my $cmdprefix = qr/gutta[,:]/; #TODO FIX    
+    my $cmdprefix = qr/(gutta[,:]|\!)/; #TODO FIX    
     my @responses; # return this.
 
     # 
@@ -213,7 +268,6 @@ sub process_msg
                 # TODO: THIS COULD BE STARTED IN A THREAD AND/OR INSERTED INTO THE DB:
                 push @responses, $PLUGINS{$plugin_ref}->command($command,$server,$msg,$nick,$mask,$target);
             } 
-              
         }
     }
     
@@ -239,8 +293,14 @@ sub process_msg
             }
         } 
     }
-    warn "FOUND NOTHING\n";
-    warn "server:$server,msg:$msg,nick:$nick,mask:$mask,targtt:$target\n";
+
+    # if running on standalone mode, then all these respnses needs to be 
+    # translated to the RFC 2812 syntax, so;
+    #    if parse_response => 1 is sent to constructor fix the grammar.
+    return $self->_parse_response(@responses) if $self->{parse_response};
+
+    # else just return it as is.
     return @responses;
+
 }
 1;
