@@ -48,13 +48,31 @@ sub new
     my $self = bless {
                db => Gutta::DBI->instance(),
     primary_table => 'users',
-   parse_response => $params{parse_response}
+   parse_response => $params{parse_response},
+        cmdprefix => qr/^(gutta[,:]|[!])/,
     }, $class;
 
     $self->{triggers} = $self->_load_triggers();
     $self->{commands} = $self->_load_commands();
 
     return $self;
+}
+
+sub set_cmdprefix
+{
+    # The cmdprefix is the prefix for the commands.
+    # command "slap" gets prefixed by this.
+    my $self = shift;
+    my $cmdprefix = shift;
+    $self->{cmdprefix} = qr/^$cmdprefix/;
+}
+
+sub get_cmdprefix
+{
+    # The cmdprefix is the prefix for the commands.
+    # this function returns the cmdprefix.
+    my $self = shift;
+    return $self->{cmdprefix};
 }
 
 sub get_triggers
@@ -93,30 +111,37 @@ sub _load_triggers
 
     return \%triggers;
 }
-=pod
 
 sub heartbeat
 {
-    # 
-    # Gutta::AbstractionLayer does things with this heartbeat function.
-    #
-    #
     my $self = shift;
-    return $self->{hertbeat} if $self->{heartbeat}
-    warn "Fireing up the heartbeat thread to interact with plugins\n";
-    # Start the heartbeat thread
-    $self->{heartbeat} =  threads->create({void => 1}, sub {
-        eval{
-            foreach my $plugin (@PLUGINS)
-            {
-               $plugin->heartbeat();
-            }
-        };
-        warn $@ if $@;
-        sleep 3;
-    }, $self, @_);
+    foreach my $plugin (@PLUGINS)
+    {
+        $plugin->heartbeat();
+    }
 }
-=cut
+
+sub heartbeat_res
+{
+    my $self = shift;
+    my $server = shift;
+    my @responses;
+
+    foreach my $plugin (@PLUGINS)
+    {
+        push @responses, $plugin->heartbeat_res();
+    }
+
+    # if running on standalone mode, then all these respnses needs to be 
+    # translated to the RFC 2812 syntax, so;
+    #    if parse_response => 1 is sent to constructor fix the grammar.
+    return $self->_parse_response(@responses) if $self->{parse_response};
+
+    # else just return it as is.
+    return @responses;
+
+
+}
 
 sub _parse_response
 {
@@ -140,8 +165,9 @@ sub _parse_response
 
     foreach my $msg (@in_msgs)
     {
+       next unless $msg;
        $msg =~ s/^msg (\S+) /PRIVMSG $1 :/i; 
-       $msg =~ s/^action (\S+) /PRIVMSG $1 :/i; 
+       $msg =~ s/^me (\S+) /PRIVMSG $1 :\001ACTION /i; 
        $msg .= "\r\n";
        push @out_msgs, $msg;
     }
@@ -160,8 +186,8 @@ sub parse_privmsg
     my $self = shift;
     $_ = shift;
     
-    m/^:(?<nick>[^!]++)! # get the nick
-         (?<mask>\S++)\s  # Get the hostmask
+    m/^:(?<nick>[^!]++)!  # get the nick
+         (?<mask>\S++)\s  # get the hostmask
                PRIVMSG\s  # this is how we know its a PRIVMSG
         (?<target>\S+)\s: # this is the target nick or chan
               (?<msg>.+)$ # rest of line would be msg /x;
@@ -244,29 +270,33 @@ sub process_msg
                                # will be the nick instead. makes sense
                                # bcz privmsgs have no #channel, but should
                                # get the response instead,
-    my $cmdprefix = qr/(gutta[,:]|\!)/; #TODO FIX    
+    my $cmdprefix = $self->{cmdprefix};
+
     my @responses; # return this.
 
     # 
     # Process Commands
     #
 
-    # check first: is it a commandprefix?, then: match potential_command with
-    # all the plugins commands.
-    my ($potential_cmdprefix, $command) = (split(/\s/, $msg))[0,1];    
-    print "PROCESSING MESSAGE $msg\n";
-
-    if ($potential_cmdprefix =~ /${cmdprefix}/)
+    # check first: is it a commandprefix?
+    if ($msg =~ /${cmdprefix}/)
     {
+        # then , then: match potential_command with all the plugins commands.
+        my ($command, @rest_of_msg) = split(/\s/,substr($msg,(@+ - 1)));
+        
         # get all commands for all plugins.
         while (my ($plugin_ref, $commands) = each $self->get_commands())
         {
             # has plugin $plugin_ref a defined command which match?
             if (exists $$commands{$command})
             {
+
                 warn "BINGO FOR $plugin_ref @ $command\n";
+                # the msg with commandprefix stripped from it.
+                my $rest_of_msg = join ' ', @rest_of_msg;
+            
                 # TODO: THIS COULD BE STARTED IN A THREAD AND/OR INSERTED INTO THE DB:
-                push @responses, $PLUGINS{$plugin_ref}->command($command,$server,$msg,$nick,$mask,$target);
+                push @responses, $PLUGINS{$plugin_ref}->command($command,$server,$msg,$nick,$mask,$target,$rest_of_msg);
             } 
         }
     }

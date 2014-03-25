@@ -78,7 +78,7 @@ sub _triggers
     # The dispatch table for "triggers" which will be triggered
     # when one of them matches the IRC message.
 
-    return 
+    return ;
 }
 
 sub _commands
