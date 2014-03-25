@@ -49,7 +49,7 @@ sub new
                db => Gutta::DBI->instance(),
     primary_table => 'users',
    parse_response => $params{parse_response},
-        cmdprefix => qr/^(gutta[,:]|[!])/,
+        cmdprefix => qr/^(gutta[,:]\s+|[!])/,
     }, $class;
 
     $self->{triggers} = $self->_load_triggers();
@@ -64,7 +64,7 @@ sub set_cmdprefix
     # command "slap" gets prefixed by this.
     my $self = shift;
     my $cmdprefix = shift;
-    $self->{cmdprefix} = qr/^$cmdprefix/;
+    $self->{cmdprefix} = $cmdprefix;
 }
 
 sub get_cmdprefix
@@ -281,8 +281,12 @@ sub process_msg
     # check first: is it a commandprefix?
     if ($msg =~ /${cmdprefix}/)
     {
+
+        # get offset to be able to strip commandprefix from command.
+        my $offset = length($&);
+
         # then , then: match potential_command with all the plugins commands.
-        my ($command, @rest_of_msg) = split(/\s/,substr($msg,(@+ - 1)));
+        my ($command, @rest_of_msg) = split(/\s/,substr($msg,$offset));
         
         # get all commands for all plugins.
         while (my ($plugin_ref, $commands) = each $self->get_commands())

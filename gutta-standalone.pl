@@ -42,6 +42,11 @@ $login||=$own_nick;
 
 my $gal = Gutta::AbstractionLayer->new(parse_response => 1);
 
+# set commandprefix:
+$gal->set_cmdprefix(qr/(${own_nick}[.:]\s+|[!])/);
+
+
+
 print "Connecting to server\n";
 
 
