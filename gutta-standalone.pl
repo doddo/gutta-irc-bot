@@ -21,14 +21,14 @@ use Gutta::AbstractionLayer;
 my $server;
 my $port = 6667;
 my $own_nick;
-my $channel;
+my @channels;
 my $login;
 
 GetOptions (
     "server=s" => \$server,
       "port=i" => \$port,
       "nick=s" => \$own_nick,
-   "channel=s" => \$channel,
+   "channel=s" => \@channels,
      "login=s" => \$login);
 
 
@@ -40,11 +40,8 @@ GetOptions (
 $login||=$own_nick;
 
 
-my $gal = Gutta::AbstractionLayer->new(parse_response => 1);
-
-# set commandprefix:
-$gal->set_cmdprefix(qr/(${own_nick}[.:]\s+|[!])/);
-
+my $gal = Gutta::AbstractionLayer->new(parse_response => 1,
+                                             own_nick => $own_nick);
 
 
 print "Connecting to server\n";
@@ -64,7 +61,7 @@ print $sock "USER $login 8 * :Gutta Standalone\r\n";
 # Read lines from the server until it tells us we have connected.
 while (my $input = <$sock>) 
 {
-    printf " >%s", $input;
+    printf " > %s", $input;
     # Check the numerical responses from the server.
     if ($input =~ /004/) {
         # We are now logged in.
@@ -82,9 +79,13 @@ print "*** logged in !!\n";
 async(\&heartbeat, $sock, $server)->detach;
 
 print "*** Logged in to server, joining channels\n";
-# Join the channel.
-print $sock "JOIN $channel\r\n";
-print " < JOIN $channel\r\n";
+# Join the channels.
+
+foreach my $channel (@channels)
+{
+    print $sock "JOIN $channel\r\n";
+    print " < JOIN $channel\r\n";
+}
 
 
 # Keep reading lines from the server.

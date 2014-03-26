@@ -49,11 +49,16 @@ sub new
                db => Gutta::DBI->instance(),
     primary_table => 'users',
    parse_response => $params{parse_response},
+         own_nick => $params{own_nick},
         cmdprefix => qr/^(gutta[,:]\s+|[!])/,
     }, $class;
 
     $self->{triggers} = $self->_load_triggers();
     $self->{commands} = $self->_load_commands();
+    if ($params{own_nick})
+    {
+        $self->{cmdprefix} = qr/(${params{own_nick}}[.:]\s+|[!])/;
+    }
 
     return $self;
 }
@@ -168,6 +173,7 @@ sub _parse_response
        next unless $msg;
        $msg =~ s/^msg (\S+) /PRIVMSG $1 :/i; 
        $msg =~ s/^me (\S+) /PRIVMSG $1 :\001ACTION /i; 
+       $msg =~ s/^action (\S+) /PRIVMSG $1 :\001ACTION /i; 
        $msg .= "\r\n";
        push @out_msgs, $msg;
     }
@@ -278,15 +284,33 @@ sub process_msg
     # Process Commands
     #
 
-    # check first: is it a commandprefix?
-    if ($msg =~ /${cmdprefix}/)
+    # check first: is it a commandprefix - or a privmsg directly to bot?
+    if (($msg =~ /${cmdprefix}/) or ($target eq $self->{own_nick}))
     {
-
         # get offset to be able to strip commandprefix from command.
+        # Only used if the match is cmdprefix but still done here to keep close 
+        # to the regex (else there might be problems later)
         my $offset = length($&);
+        my $command;
+        my @rest_of_msg;
 
-        # then , then: match potential_command with all the plugins commands.
-        my ($command, @rest_of_msg) = split(/\s/,substr($msg,$offset));
+        if ($target eq $self->{own_nick})
+        {
+            ($command, @rest_of_msg) = split(/\s/,$msg);
+            
+            # OBS - if a privmsg to the BOT, then change target from bot->$nick.
+            # because the sender of the message is logically the recipient of the
+            # reply.
+            $target = $nick;
+        }
+    
+        if ($msg =~ /${cmdprefix}/) 
+        {
+            # if match also the cmdprefix, then make sure to strip the command-
+            # prefix from the message.
+            ($command, @rest_of_msg) = split(/\s/,substr($msg,$offset));
+ 
+        }
         
         # get all commands for all plugins.
         while (my ($plugin_ref, $commands) = each $self->get_commands())
@@ -298,9 +322,15 @@ sub process_msg
                 warn "BINGO FOR $plugin_ref @ $command\n";
                 # the msg with commandprefix stripped from it.
                 my $rest_of_msg = join ' ', @rest_of_msg;
-            
-                # TODO: THIS COULD BE STARTED IN A THREAD AND/OR INSERTED INTO THE DB:
-                push @responses, $PLUGINS{$plugin_ref}->command($command,$server,$msg,$nick,$mask,$target,$rest_of_msg);
+
+                # removing any crap from the msg.
+                chomp($rest_of_msg);
+                eval { 
+                    # TODO: THIS COULD BE STARTED IN A THREAD AND/OR INSERTED INTO THE DB:
+                    push @responses, $PLUGINS{$plugin_ref}->command($command,$server,$msg,$nick,$mask,$target,$rest_of_msg);
+                };
+                warn($@) if $@; #TODO handle errors better
+                
             } 
         }
     }
@@ -321,9 +351,11 @@ sub process_msg
             {
                 # Here a regex matched. That was from $plugin_ref.
                 warn sprintf 'trigger "%s" matched "%s" for plugin %s.', $regex_trigger, $&, $plugin_ref;
-                
-                # TODO: THIS COULD BE STARTED IN A THREAD AND/OR INSERTED INTO THE DB:
-                push @responses, $PLUGINS{$plugin_ref}->trigger($regex_trigger,$server,$msg,$nick,$mask,$target, $&);
+                eval {
+                    # TODO: THIS COULD BE STARTED IN A THREAD AND/OR INSERTED INTO THE DB:
+                    push @responses, $PLUGINS{$plugin_ref}->trigger($regex_trigger,$server,$msg,$nick,$mask,$target, $&);
+                };
+                warn($@) if $@; #TODO handle errors better
             }
         } 
     }

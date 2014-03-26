@@ -78,7 +78,7 @@ Irssi::signal_add_last('message private', sub {
     };
     warn ($@) if $@;
 });
-=pod
+
 Irssi::timeout_add(2142, sub {
     # This will call plugins heartbeats method  on a 2142 ms interval.
     # then for each connected server, it will call heartbeat_res -
@@ -111,4 +111,4 @@ Irssi::timeout_add(2142, sub {
     }
 
 }, undef);
-=cut
+

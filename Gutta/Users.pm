@@ -167,4 +167,30 @@ sub get_users
     return $userdata;
 }
 
+sub has_session
+{
+    # "booelan" returns whether the user has a session or not.
+    my $self = shift;
+    my $nick = shift;
+    my $mask = shift;
+    my $dbh = $self->dbh();
+
+    my $sth = $dbh->prepare("SELECT mask, session_expire FROM sessions WHERE nick = ?");
+    $sth->execute($nick);
+    my ($smask, $session_expire) = $sth->fetchrow_array();
+
+    if ($smask eq $mask and $session_expire >= time)
+    {
+        warn ("user is  logged in");
+        return $session_expire;  # true
+    }
+    else
+    {
+        warn ("user was not logged in: $session_expire");
+        return undef; # False
+    }
+}
+
+
+
 1;

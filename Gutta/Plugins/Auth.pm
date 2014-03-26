@@ -42,60 +42,67 @@ sub _initialise
 }
 
 
-sub process_privmsg
+sub _commands
 {
     my $self = shift;
+    # the commands for the auth plugin.
+    return {
+
+        'identify' => sub { $self->process_cmd('identify', @_) },
+        'register' => sub { $self->process_cmd('register', @_) },
+         'session' => sub { $self->process_cmd('session', @_) },
+          'passwd' => sub { $self->process_cmd('passwd', @_) },
+    }
+}
+
+sub process_cmd
+{
+    my $self = shift;
+    my $command = shift; #identify or register
+    my $server = shift;
     my $msg = shift;
     my $nick = shift;
     my $mask = shift;
+    my $target = shift;
+    my $rest_of_msg = shift;
 
-    warn "processing privmsg for Auth\n";
-
-    if ($msg =~ m/^identify (\S+)/)
+    # make sure they dont chat about these things publicly
+    if ($target =~ /^#/) 
     {
-        warn "idenfiying $nick with  $1";
-        $self->identify($nick, $nick, $1, $mask);
-    } elsif ($msg =~ m/^session/i) {
-        if (my $expire_date = $self->has_session($nick, $mask))
-        {
-            return "msg $nick OK - you are logged in until $expire_date"
-        } else {
-            return "msg $nick SOZ, u are NOT logged in"
-        }
-    } elsif ($msg =~ m/^register\s+(\S+)\s*(\S+)?/) {
-        my $password = $1;
-        my $email;
-        $email = $2 if $2;
-
-        return $self->register_nick($nick, $nick, $password, $email);
+        return "msg $target $nick: please talk about these things over private channel...";    
     }
 
+    if ($command eq 'identify')
+    {
+        return "msg $nick usage: identify <password>" unless $rest_of_msg;
+        warn "idenfiying $nick with [$rest_of_msg]";
+        return $self->identify($nick, $rest_of_msg, $mask);
+        
+
+    } elsif ($command eq 'session') {
+        
+        if (my $expire_date = $self->has_session($nick, $mask))
+        {
+            return "msg $nick OK - you are logged in until $expire_date";
+        } else {
+            return "msg $nick SOZ, u are NOT logged in";
+        }
+
+    } elsif ($command eq 'register') {
+        return "msg $nick usage: register <password>" unless $rest_of_msg;
+        my ($password, $email) = split/\s/, $rest_of_msg;
+        return $self->register_nick($nick, $nick, $password, $email);
+    } elsif ($command eq 'passwd') {
+        return "msg $nick TODO: This feature is not programmed yet";
+    }
 
 }
 
 sub has_session
 {
-    # "booelan" returns whether the user has a session or not.
+    # "returns whether the user has a session or not.
     my $self = shift;
-    my $nick = shift;
-    my $mask = shift;
-    my $dbh = $self->dbh();
-
-    my $sth = $dbh->prepare("SELECT mask, session_expire FROM sessions WHERE nick = ?");
-    $sth->execute($nick);
-    my ($smask, $session_expire) = $sth->fetchrow_array();
-        
-
-    if ($smask eq $mask and $session_expire >= time)
-    {
-        warn ("user is  logged in");
-        return $session_expire;  # true
-    }
-    else
-    {
-        warn ("user was not logged in: $session_expire");
-        return undef; # False
-    }
+    return $self->{users}->has_session(@_);
 }
 
 sub register_nick
@@ -119,7 +126,7 @@ sub register_nick
 
 sub identify
 {
-    # register a new user with gutta
+    # identify
     my $self = shift;
     my $target = shift;
     my $nick = shift;
@@ -133,6 +140,8 @@ sub identify
         {
             $self->_login_user($nick, $mask) or return "msg $target something unknown went wrong\n";
             return "msg $target OK - $nick logged in."
+        } else {
+            return "msg $target Not OK - invalid password for $nick."
         }
     } else {
         return "msg $target $nick is not in the system."

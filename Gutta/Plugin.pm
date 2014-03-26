@@ -188,7 +188,7 @@ sub command
 {
     my $self = shift;
     my $command = shift;
-    # Left in @_ = $server, $msg, $nick, $mask, $target
+    # Left in @_ = $server, $msg, $nick, $mask, $target, $rest_of_msg/$pattern_match
     # it will be passed on to the command
     # DO IT (something like this) = shift;
     #
