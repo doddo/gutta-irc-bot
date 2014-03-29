@@ -1,4 +1,4 @@
-# Gutta the Irssi bot
+# Gutta the IRC bot
 
 Gutta is a modular IRC bot with powerful plugin interface and a small footprint.
 
@@ -49,7 +49,7 @@ Gutta::Plugins::Foo, and inherit Gutta::Plugin.
 
 Here is the ~~hello world~~ Gutta::Plugins::Slap plugin:
 
-```
+```perl
 package Gutta::Plugins::Slap;
 # can slap with this one
 
@@ -57,13 +57,13 @@ use parent Gutta::Plugin;
 
 sub slap
 {
-    my $self = shift;
-    my $server = shift;
-    my $msg = shift;
-    my $nick = shift;
-    my $mask = shift;
-    my $target = shift;
-    my $rest_of_msg = shift;
+    my $self = shift;          # ref to class
+    my $server = shift;        # the irc server of msg origin
+    my $msg = shift;           # the message
+    my $nick = shift;          # the nick who sent it
+    my $mask = shift;          # the nicks hostmask/ip
+    my $target = shift;        # target in what channel/from what nick did the msg originate
+    my $rest_of_msg = shift;   # the message with cmdprefix stripped.
     
     # they need someonw to slap
     return unless $rest_of_msg;
