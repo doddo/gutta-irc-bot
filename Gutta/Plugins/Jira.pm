@@ -66,22 +66,19 @@ sub process_msg
     my $nick = shift;
     my $mask = shift;
     my $target = shift;
-    my $match = shift;
+    my $rest_of_msg = shift;
  
     return undef unless $msg;
-    # word boundries does not seem to work???
-    if ($msg =~ /([A-Z]{3,30}-[0-9]{1,7})/) 
-    { 
-       return "msg ${target} unset url." unless $self->{data}{'url'};
-       return "msg ${target} " . $self->get_jira_issue($1);
-    } elsif ($msg =~ /!jira set (username|password|url)=(\S+)\b/ ) {
-        # TODO: this will be replaced at later time
-        $self->{data}{$1} = $2;
-        $self->save();
-        return "msg ${target} OK - [$1] set to [$2]";
-    } elsif ($msg =~ /!jira feed/){
-        return "msg ${target} " . $self->__setup_jira_feed(split(/\s+/,$msg));
-    } elsif ($msg =~ /!jira Dump/ ) {
+    if ($rest_of_msg =~ /set (username|password|url)=(\S+)\b/ ) {
+        $self->set_config($1, $2);   
+        return sprintf "msg %s %s: OK - [%s] set to [%s]", $target, $nick, $1, $self->get_config($1);
+    } elsif ($rest_of_msg =~ /^feed/){
+
+        foreach my $response ($self->__setup_jira_feed(split(/\s+/,$rest_of_msg)))
+        {
+            return "msg ${target} " . $response;
+        }
+    } elsif ($msg =~ /^Dump/i ) {
         # TODO: fix this 
         warn Dumper($self->{data});
     } else { 
@@ -115,7 +112,7 @@ sub _commands
     my $self = shift;
 
     return {
-        qr/jira/ => sub { $self->process_msg(@_) },
+        'jira' => sub { $self->process_msg(@_) },
     };
 }
 
@@ -134,7 +131,7 @@ sub _setup_shema
     CREATE TABLE IF NOT EXISTS jira_feeds_channels (
             feedkey TEXT,
             channel TEXT NOT NULL,
-      FOREIGN KEY (feedkey) REFERENCES jira_feeds(feedkey),
+      FOREIGN KEY (feedkey) REFERENCES jira_feeds(feedkey) ON DELETE CASCADE,
       CONSTRAINT onefc UNIQUE (feedkey, channel)
     )});
 
@@ -142,28 +139,28 @@ sub _setup_shema
 
 }
 
-
-
-
-
 sub __setup_jira_feed
 {
     # the command line interface
     # for configuring feeds
     # it is a little ugly but will be fixed sometime
     my $self = shift;
-    shift; #jira
     shift; #feed
     my $action = shift;
     my $feedkey = shift;
     my @args = @_;
     my $feed;
+    my $dbh = $self->dbh();
+
     if ($action =~ '^del')
     {
-        delete($self->{data}{feeds}{$feedkey});
-        $self->save();
+        # delete a feed from the database
+        $dbh->prepare('DELETE FROM jira_feeds WHERE feedkey=?');
+        $dbh->execute($feedkey) or return "Unable to delete $feedkey: $dbh->errstr";
         return "undefined feed $feedkey";
+
     } elsif($action eq 'list') {
+        # TODO
         return Dumper($self->{data}{feeds});
     } elsif($action eq 'add') {
         undef($self->{data}{feeds}{$feedkey});

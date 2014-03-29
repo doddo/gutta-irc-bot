@@ -277,5 +277,30 @@ sub get_config
     return $value;
 }
 
+sub get_all_config
+{
+    #
+    # Get all config values from the plugin_config table
+    # for plugin.
+    #
+    # Return a list of key, value pairs
+    #
+    my $self = shift;
+    my $dbh = $self->dbh();
+
+    my $plugin = shift||scalar caller(0);
+    my @values;
+
+    my $sth = $dbh->prepare(qq{SELECT key, value FROM plugin_config WHERE plugin_name=?});
+    $sth->execute($plugin);
+
+    while (my ($key, $value) = $sth->fetchrow_array())
+    {
+        push @values, [ $key, $value ];
+
+    }
+
+    return @values;
+}
 
 1;
