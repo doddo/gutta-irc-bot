@@ -117,7 +117,7 @@ sub heartbeat
 
     if (($nowt - $self->{heartbeat_act_ts}) >= $self->{heartbeat_act_s})
     {
-        warn sprintf "heartbeat called for heartbeat act because delta between %s minus %s was %i", $nowt, $self->{heartbeat_act_ts}, ($nowt - $self->{heartbeat_act_ts});
+        warn "♥\n";
         $self->{heartbeat_act_ts} = $nowt;
         $self->_heartbeat_act;
     }
@@ -133,7 +133,6 @@ sub _heartbeat_act
     # gets returned by called from heartbeat_res for every connected
     # to server
 }
-
 
 sub heartbeat_res
 {
@@ -153,8 +152,6 @@ sub dbh
     return $self->{db}->dbh();
 }
 
-
-
 sub _dbinit
 {
     # DBinit provides support for plugins to initialise their db:s, 
@@ -164,11 +161,11 @@ sub _dbinit
     my $self = shift;
     my $dbh = $self->dbh();
 
-    my $query = $self->_setup_shema() || return;
-
-    my $sth = $dbh->prepare($query) or die "unable to run: $query\n";
-    $sth->execute() or  die "unable to execute; $query\n";
-
+    foreach my $query ($self->_setup_shema())
+    {
+        my $sth = $dbh->prepare($query) or die "unable to run: $query\n";
+        $sth->execute() or  die "unable to execute; $query\n";
+    }
 }
 
 sub _setup_shema
@@ -212,5 +209,73 @@ sub trigger
     
     return $self->{triggers}{$trigger}->(@_);
 }
+
+
+#
+#  Functions with persistent config
+#    in the SQLite database through Gutta::DBI
+#
+sub __setup_config_shema
+{
+    #
+    # Used to setup a common config table for all plugins.
+    # 
+    # It's a convenient alternative to storable in the $self->{data},
+    # if multiple plugins want to access each others configs.
+    # or store simple key value pairs without setting up their own schema
+    #
+    my $self = shift;
+    my $dbh = $self->dbh();
+
+    my $query = qq{
+     CREATE TABLE IF NOT EXISTS plugin_config (
+      plugin_name TEXT NOT NULL,
+              key TEXT NOT NULL,
+            value TEXT NOT NULL,
+      PRIMARY KEY (plugin_name, key) ON CONFLICT REPLACE
+
+    );};
+    my $sth = $dbh->prepare($query) or die "unable to run: $query\n";
+    $sth->execute() or  die "unable to execute; $query\n:  $dbh->errstr;";
+
+}
+
+sub set_config
+{
+    #
+    # Set a config in the plugin_config table
+    #
+    my $self = shift;
+    my $dbh = $self->dbh();
+
+    my $key = shift;
+    my $value = shift;
+    my $plugin = shift||scalar caller(0);
+
+    my $sth = $dbh->prepare('INSERT INTO plugin_config (plugin_name,key,value) VALUES(?,?,?)');
+    $sth->execute($plugin,$key,$value);
+
+}
+
+sub get_config
+{
+    #
+    # Get a config from the plugin_config table
+    #
+    my $self = shift;
+    my $dbh = $self->dbh();
+
+    my $key = shift;
+    my $plugin = shift||scalar caller(0);
+
+    my $sth = $dbh->prepare(qq{SELECT value FROM plugin_config WHERE
+                                                               plugin_name=? AND key=? });
+    $sth->execute($plugin,$key);
+
+    my ($value) = $sth->fetchrow_array();
+
+    return $value;
+}
+
 
 1;
