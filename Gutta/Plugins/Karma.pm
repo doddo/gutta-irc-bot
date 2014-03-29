@@ -8,7 +8,7 @@ use warnings;
 sub _initialise
 {
     my $self = shift;
-    $self->_dbinit('karma');
+    $self->_dbinit();
 }
 
 sub _setup_shema 

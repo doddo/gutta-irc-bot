@@ -61,10 +61,12 @@ then using the heartbeat, it will act on timer and poll on regular basis.
 sub process_msg
 {
     my $self = shift;
+    my $server = shift;
     my $msg = shift;
     my $nick = shift;
     my $mask = shift;
     my $target = shift;
+    my $match = shift;
  
     return undef unless $msg;
     # word boundries does not seem to work???
@@ -91,8 +93,58 @@ sub _initialise
 {
     my $self = shift;
     $self->{datafile} = "Gutta/Data/" . __PACKAGE__ . ".data",
+    $self->_dbinit(); #setup jira database tables
     $self->load(); # load the jira file
 }
+
+sub _triggers
+{
+    # The dispatch table for "triggers" which will be triggered
+    # when one of them matches the IRC message.
+    my $self = shift;
+
+    return {
+        qr/[A-Z]{3,30}-[0-9]{1,7}/ => sub { $self->get_jira_issue(@_) },
+    };
+}
+
+
+sub _commands
+{
+    # The commands for JIRA plugin.
+    my $self = shift;
+
+    return {
+        qr/jira/ => sub { $self->process_msg(@_) },
+    };
+}
+
+
+sub _setup_shema
+{
+    my $self = shift;
+    my $what2setup = shift;
+
+    my @queries  = (qq{
+    CREATE TABLE IF NOT EXISTS jira_feeds (
+            feedkey TEXT PRIMARY KEY,
+            filters TEXT,
+         last_check INTEGER DEFAULT 0
+    )}, qq{
+    CREATE TABLE IF NOT EXISTS jira_feeds_channels (
+            feedkey TEXT,
+            channel TEXT NOT NULL,
+      FOREIGN KEY (feedkey) REFERENCES jira_feeds(feedkey),
+      CONSTRAINT onefc UNIQUE (feedkey, channel)
+    )});
+
+    return @queries;
+
+}
+
+
+
+
 
 sub __setup_jira_feed
 {
@@ -258,49 +310,74 @@ sub monitor_jira_feed
 
 sub __download_jira_feed
 {
+    my $self = shift;
+    my $server = shift;
+    my $msg = shift;
+    my $nick = shift;
+    my $mask = shift;
+    my $target = shift;
+    my $feedkey = shift;
+ 
+    # get the configs from the config table
+    my $password = $self->get_config('password');
+    my $username = $self->get_config('username');
+    my $url = $self->get_config('url');
+
     #Download from the jira feed.
     # it will search for KEY=$feedkay key.is+$feedkey
-    my $self = shift;
-    my $feedkey = shift;
-
     my $ua = LWP::UserAgent->new;
-    my $feedURL = sprintf("https://%s/activity?maxResults=10&streams=key+IS+%s", $self->{data}{url}, $feedkey);
+    my $feedURL = sprintf("https://%s/activity?maxResults=10&streams=key+IS+%s", $url, $feedkey);
 
     my $req = HTTP::Request->new(GET => $feedURL);
-    if ($self->{data}{'username'} && $self->{data}{'password'})
+
+    if ($username && $password)
     {
-        warn("settting authirization headers $self->{data}{'username'},XXXXXX") ;
-        $req->authorization_basic($self->{data}{'username'},  $self->{data}{'password'});
+        warn("settting authirization headers $username,  $password");
+        $req->authorization_basic($username, $password);
+    } else {
+        warn("going ahead without username/password\n");
     }
     my $response =  $ua->request($req);
 
 
-     if ($response->is_success) {
-         return 1, $response->decoded_content;
-     }
-     else {
-         return 0, $response->status_line;
-     }
+    if ($response->is_success) {
+        return 1, $response->decoded_content;
+    }
+    else {
+        return 0, $response->status_line;
+    }
 }
 
 sub get_jira_issue
 {
     my $self = shift;
-    # TODO: Fix this later
+    my $server = shift;
+    my $msg = shift;
+    my $nick = shift;
+    my $mask = shift;
+    my $target = shift;
     my $issue_id = shift;
+ 
+    # get the configs from the config table
+    my $password = $self->get_config('password');
+    my $username = $self->get_config('username');
+    my $url = $self->get_config('url');
+
     my $ua = LWP::UserAgent->new;
-    my $req = HTTP::Request->new(GET => "https://$self->{data}{url}/rest/api/2/issue/${issue_id}");
+    my $req = HTTP::Request->new(GET => "https://${url}/rest/api/2/issue/${issue_id}");
     $req->header( 'Content-Type' => 'application/json');
-    if ($self->{data}{'username'} && $self->{data}{'password'})
+    if ($username && $password)
     {
-        warn("settting authirization headers $self->{data}{'username'},  $self->{data}{'password'}");
-        $req->authorization_basic($self->{data}{'username'},  $self->{data}{'password'});
+        warn("settting authirization headers $username,  $password");
+        $req->authorization_basic($username, $password);
+    } else {
+        warn("going ahead without username/password\n");
     }
     my $response =  $ua->request($req);
 
     my $issue = from_json($response->decoded_content, { utf8 => 1 });
 
-    return sprintf("%s: %s (https://%s/issues/%s)", $issue_id, $$issue{'fields'}{'summary'}, $self->{data}{url}, $issue_id);
+    return sprintf("%s: %s (https://%s/issues/%s)", $issue_id, $$issue{'fields'}{'summary'}, $url, $issue_id);
 }
 
 1;
