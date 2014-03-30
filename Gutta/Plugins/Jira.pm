@@ -124,15 +124,21 @@ sub _setup_shema
 
     my @queries  = (qq{
     CREATE TABLE IF NOT EXISTS jira_feeds (
-            feedkey TEXT PRIMARY KEY,
-            filters TEXT,
+            feedkey TEXT NOT NULL PRIMARY KEY,
          last_check INTEGER DEFAULT 0
     )}, qq{
     CREATE TABLE IF NOT EXISTS jira_feeds_channels (
-            feedkey TEXT,
+            feedkey TEXT NOT NULL,
             channel TEXT NOT NULL,
+             server TEXT NOT NULL,
+             filter TEXT,
       FOREIGN KEY (feedkey) REFERENCES jira_feeds(feedkey) ON DELETE CASCADE,
-      CONSTRAINT onefc UNIQUE (feedkey, channel)
+      CONSTRAINT onefc UNIQUE (feedkey, channel, server)
+    )}, qq{
+    CREATE TABLE IF NOT EXISTS jira_users (
+              nick TEXT PRIMARY KEY,
+     jira_username TEXT NOT NULL,
+      FOREIGN KEY (nick) REFERENCES users(nick) ON DELETE CASCADE
     )});
 
     return @queries;
@@ -147,10 +153,21 @@ sub __setup_jira_feed
     my $self = shift;
     shift; #feed
     my $action = shift;
-    my $feedkey = shift;
     my @args = @_;
     my $feed;
     my $dbh = $self->dbh();
+
+    my @servers;  # on what servers (regex) to setup feed 
+    my @channels; # what channels on those servers (string)
+    my $feedkey;  # what is the key of the server to add.
+
+    my $ret = GetOptionsFromArray(\@args, 
+        'server=s' => \@servers,
+       'channel=s' => \@channels,
+       'feedkey=s' => \$feedkey,
+    );
+
+   
 
     if ($action =~ '^del')
     {
@@ -163,8 +180,22 @@ sub __setup_jira_feed
         # TODO
         return Dumper($self->{data}{feeds});
     } elsif($action eq 'add') {
-        undef($self->{data}{feeds}{$feedkey});
-        $feed = \%{$self->{data}{feeds}{$feedkey}};
+        # configure more jira feeds -- add them to the database.
+        my $sth = $dbh->prepare(qq{INSERT OR IGNORE INTO jira_feeds (feedkey) VALUES(?)});
+        $sth->execute($feedkey); 
+        my $sth = $dbh->prepare(qq{INSERT OR REPLACE INTO jira_feeds_channels 
+                           (feedkey, channel, server) VALUES (?,?,?)});
+
+        # iterate trhrough all the servers and channels
+        foreach my $server_re (@servers)
+        {
+            foreach my $channel (@channels)
+            {
+                warn ("adding feed $feedkey, on channel $channel, on servers matching $server_re...\n");
+                $sth->execute($feedkey,$channel,$server_re) or warn "Unable to configure feed $feedkey: $dbh->errstr";
+            }
+        }
+
     } elsif ($action eq 'test') {
         my ($status, $feeddata) = $self->__download_jira_feed($feedkey);
         if ($status)
@@ -175,14 +206,8 @@ sub __setup_jira_feed
         }
     }
 
-    my $ret = GetOptionsFromArray(\@args, $feed,
-        'server=s@',
-        'channel=s@'
-    );
-
-    $self->save();
-    return sprintf ("adding feed '%s' servers '%s' and channels '%s'",
-                   $feedkey, join(',', @{$$feed{server}}), join(',', @{$$feed{channel}}));
+#    return sprintf ("adding feed '%s' servers '%s' and channels '%s'",
+                   #$feedkey, join(',', @{$$feed{server}}), join(',', @{$$feed{channel}}));
 }
 
 sub _heartbeat_act
@@ -197,6 +222,8 @@ sub _heartbeat_act
 
 sub heartbeat_res
 {
+    # the response gets populated if anything new is found, and then it
+    # is sent to the server.
     my $self = shift;
     my $server = shift;
     my $news = $self->{news};
@@ -232,6 +259,10 @@ sub heartbeat_res
 
 sub monitor_jira_feed
 {
+    # Downloads and parses the configured feeds (if any)
+    # Updates timestamp for those feeds too if activity founds
+    # and populates the heartbeat_res with a bunch of responses.
+    #
     my $self = shift; 
     my $feeds = \%{$self->{data}{feeds}};
     my $hs = HTML::Strip->new();
