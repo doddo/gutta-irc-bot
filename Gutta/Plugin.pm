@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use DateTime;
 
-sub new 
+sub new
 {
     my $class = shift;
     my $dt =  DateTime->new( year=>(2000+int(rand(10))));
@@ -103,7 +103,7 @@ sub load
 }
 
 sub save
-{ 
+{
     # save $self->{data} to file
     my $self = shift;
     store \%{$self->{data}}, $self->{datafile};
@@ -125,8 +125,8 @@ sub heartbeat
 
 sub _heartbeat_act
 {
-    # here is acting to the heartbeats. the plugins wanna override 
-    # this function, but the mechanics for *when* to act 
+    # here is acting to the heartbeats. the plugins wanna override
+    # this function, but the mechanics for *when* to act
     # pretty much should be the same
     #
     # This is a "void" function. --  Data collected here
@@ -154,7 +154,7 @@ sub dbh
 
 sub _dbinit
 {
-    # DBinit provides support for plugins to initialise their db:s, 
+    # DBinit provides support for plugins to initialise their db:s,
     # it runs the sql from the _setup_shema method
     # the $self->setup_shema() class.
     # this can be called multiple times by passing different tables to setup_schema
@@ -250,6 +250,7 @@ sub set_config
 
     my $key = shift;
     my $value = shift;
+    # the name of the calling class.
     my $plugin = shift||scalar caller(0);
 
     my $sth = $dbh->prepare('INSERT INTO plugin_config (plugin_name,key,value) VALUES(?,?,?)');
