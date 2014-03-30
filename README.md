@@ -8,11 +8,12 @@ Install perl and all required modules.
 
 Then it is ready to go.
 
+This version of Gutta requires at least perl 5.16, (but it's not too much work making it run on older perl 5.10 too so maybe in the future it will)
 
 
 ### Standalone mode
 
-run 
+run
 
 ```bash
 ./gutta-standalone.pl --server irc.example.com --nick gutta --channel \#farmen --channel \#channel2
@@ -31,7 +32,7 @@ do /load gutta.pl
 and then its good to go.
 
 
-### Plugins
+## Plugins
 
 Gutta works with plugins, who recieves messages parsed by the Gutta::AbstractionLayer
 
@@ -39,7 +40,7 @@ The plugins are expected to return a conventional irc message and supports a mul
 
 
 
-#### Writing Plugins'
+### Writing Plugins
 
 Writing plugins for Gutta is easy.
 
