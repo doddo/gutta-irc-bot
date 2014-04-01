@@ -70,7 +70,7 @@ sub process_msg
  
     return undef unless $msg;
     if ($rest_of_msg =~ /set (username|password|url)=(\S+)\b/ ) {
-        $self->set_config($1, $2);   
+        $self->set_config($1, $2);
         return sprintf "msg %s %s: OK - [%s] set to [%s]", $target, $nick, $1, $self->get_config($1);
     } elsif ($rest_of_msg =~ /^feed/){
 
@@ -78,11 +78,24 @@ sub process_msg
         {
             return "msg ${target} " . $response;
         }
-    } elsif ($msg =~ /^Dump/i ) {
-        # TODO: fix this 
+    } elsif ($rest_of_msg =~ /^Dump/i ) {
+        # TODO: fix this
         warn Dumper($self->{data});
-    } else { 
-       return undef;
+    } elsif ($rest_of_msg =~ /^i(?:'m| ?am)\s+(\S+)\b/i ) {
+        $self->set_jira_user($nick, $1);
+        my $jira_user_name = $self->get_jira_user($nick);
+        return "msg $target $nick: OK -  you are '$jira_user_name'"
+    } elsif ($rest_of_msg =~ /who\s*am\s*i/i ) {
+        my $jira_user_name = $self->get_jira_user($nick);
+        if ($jira_user_name)
+        {
+            return "msg $target $nick: you are '$jira_user_name'.\n";
+        } else {
+
+            return "msg $target $nick: I don't know who you are.";
+        }
+     } else {
+        return "msg $target $nick: Illegal command '$rest_of_msg'. (Help not implemented yet).";
     }
 }
 
@@ -157,11 +170,14 @@ sub __setup_jira_feed
     my $feed;
     my $dbh = $self->dbh();
 
-    my @servers;  # on what servers (regex) to setup feed 
+    my @servers;  # on what servers (regex) to setup feed
     my @channels; # what channels on those servers (string)
     my $feedkey;  # what is the key of the server to add.
 
-    my $ret = GetOptionsFromArray(\@args, 
+    my @responses;
+
+
+    my $ret = GetOptionsFromArray(\@args,
         'server=s' => \@servers,
        'channel=s' => \@channels,
        'feedkey=s' => \$feedkey,
@@ -172,8 +188,8 @@ sub __setup_jira_feed
     if ($action =~ '^del')
     {
         # delete a feed from the database
-        $dbh->prepare('DELETE FROM jira_feeds WHERE feedkey=?');
-        $dbh->execute($feedkey) or return "Unable to delete $feedkey: $dbh->errstr";
+        my $sth = $dbh->prepare('DELETE FROM jira_feeds WHERE feedkey=?');
+        $sth->execute($feedkey) or return "Unable to delete $feedkey: $dbh->errstr";
         return "undefined feed $feedkey";
 
     } elsif($action eq 'list') {
@@ -182,8 +198,8 @@ sub __setup_jira_feed
     } elsif($action eq 'add') {
         # configure more jira feeds -- add them to the database.
         my $sth = $dbh->prepare(qq{INSERT OR IGNORE INTO jira_feeds (feedkey) VALUES(?)});
-        $sth->execute($feedkey); 
-        my $sth = $dbh->prepare(qq{INSERT OR REPLACE INTO jira_feeds_channels 
+        $sth->execute($feedkey);
+        $sth = $dbh->prepare(qq{INSERT OR REPLACE INTO jira_feeds_channels
                            (feedkey, channel, server) VALUES (?,?,?)});
 
         # iterate trhrough all the servers and channels
@@ -191,8 +207,8 @@ sub __setup_jira_feed
         {
             foreach my $channel (@channels)
             {
-                warn ("adding feed $feedkey, on channel $channel, on servers matching $server_re...\n");
-                $sth->execute($feedkey,$channel,$server_re) or warn "Unable to configure feed $feedkey: $dbh->errstr";
+                push (@responses, "adding feed $feedkey, on channel $channel, on servers matching $server_re...\n");
+                $sth->execute($feedkey,$channel,$server_re) or push (@responses, "Unable to configure feed $feedkey.");
             }
         }
 
@@ -206,13 +222,12 @@ sub __setup_jira_feed
         }
     }
 
-#    return sprintf ("adding feed '%s' servers '%s' and channels '%s'",
-                   #$feedkey, join(',', @{$$feed{server}}), join(',', @{$$feed{channel}}));
+    return @responses;
 }
 
 sub _heartbeat_act
 {
-    my $self = shift; 
+    my $self = shift;
     if (scalar keys %{$self->{data}{feeds}} >0)
     {
         warn "calling monitor_jira_feed\n";
@@ -263,7 +278,7 @@ sub monitor_jira_feed
     # Updates timestamp for those feeds too if activity founds
     # and populates the heartbeat_res with a bunch of responses.
     #
-    my $self = shift; 
+    my $self = shift;
     my $feeds = \%{$self->{data}{feeds}};
     my $hs = HTML::Strip->new();
     my $strp = DateTime::Format::Strptime->new(
@@ -289,7 +304,7 @@ sub monitor_jira_feed
         
         my $feed = XML::FeedPP->new($feeddata);
         
-        foreach my $item ($feed->get_item()) 
+        foreach my $item ($feed->get_item())
         {
             my $title = $item->title();
             
@@ -301,17 +316,17 @@ sub monitor_jira_feed
             
             if ($post_timestamp <= $$feeds{$feedkey}{timestamp})  {
                 # Hers what happens with _OLD_ news
-                #warn sprintf ("Jira feed:%s post_timestamp %s is older than latest stored timestamp: %s", 
+                #warn sprintf ("Jira feed:%s post_timestamp %s is older than latest stored timestamp: %s",
                 #                $feedkey,  $post_timestamp,  $$feeds{$feedkey}{timestamp});
                 next;
             } elsif ($nowt->subtract_datetime_absolute($dt)->delta_seconds > 360000) {
                 # and  to prevent gutta from rambling old stuff because he's been out of sync
-                warn sprintf ("Jira feed:%s datetime from post %s is more than 1 hours older than current time %s", 
+                warn sprintf ("Jira feed:%s datetime from post %s is more than 1 hours older than current time %s",
                                 $feedkey, $dt->strftime('%F %T'), $nowt->strftime('%F %T'));
                 next;
            }
            
-           if ($title =~ m{^\s* 
+           if ($title =~ m{^\s*
                     <a\s*href=[^>]+>\s*([^<>]+)\s*</a>\s* # the name
                         ((:?re)?opened|closed|created)\s* # what they do?
             <}ix)
@@ -407,5 +422,69 @@ sub get_jira_issue
 
     return sprintf("%s: %s (https://%s/issues/%s)", $issue_id, $$issue{'fields'}{'summary'}, $url, $issue_id);
 }
+#
+#   GET THE FEEDS
+#   FROM THE DB.
+#
+
+sub __get_feeds
+{
+    # get the feeds from the feeds table, along with ts when it last updated
+    my $self = shift;
+    my $dbh = $self->dbh();
+
+    my $sth = $dbh->prepare('SELECT feedkey, last_check FROM jira_feeds');
+    
+    return  $sth->fetchall_hashref('feedkey');
+}
+
+sub __get_feeds_channels
+{
+    # get the feeds from the feeds_channels table, with everything on it.
+
+    my $self = shift;
+    my $dbh = $self->dbh();
+
+    my $sth = $dbh->prepare('SELECT feedkey, channel, server, filter FROM jira_feeds_channels');
+    
+    return  $sth->fetchall_hashref('server');
+ 
+}
+
+#
+#   work with jira users
+#
+#
+
+sub set_jira_user
+{
+    my $self = shift;
+    my $nick = shift;
+    my $jira_username = shift;
+    my $dbh = $self->dbh();
+
+    my $sth = $dbh->prepare('INSERT OR REPLACE INTO jira_users (nick,jira_username) VALUES(?,?)');
+    # TODO handle errors.
+    $sth->execute($nick,$jira_username);
+
+}
+
+sub get_jira_user
+{
+    my $self = shift;
+    my $nick = shift;
+    my $dbh = $self->dbh();
+
+    my $sth = $dbh->prepare('SELECT jira_username from jira_users WHERE nick = ?');
+    # TODO handle errors.
+    $sth->execute($nick);
+
+
+    my ($jira_username) = $sth->fetchrow_array();
+
+    return $jira_username;
+}
+
+
 
 1;
