@@ -4,7 +4,7 @@
 #  it just connects to --server using --nick and joins --channel.
 # Then it will pass along all the messages through the Gutta::Abstractionlayer
 # which interfaces with the plugins.
-# 
+#
 
 use strict;
 use warnings;
@@ -56,10 +56,10 @@ my $sock = new IO::Socket::INET(PeerAddr => $server,
 print "*** Logging in to server\n";
 # Log on to the server.
 print $sock "NICK $own_nick\r\n";
-print $sock "USER $login 8 * :Gutta Standalone\r\n"; 
+print $sock "USER $login 8 * :Gutta Standalone\r\n";
 
 # Read lines from the server until it tells us we have connected.
-while (my $input = <$sock>) 
+while (my $input = <$sock>)
 {
     printf " > %s", $input;
     # Check the numerical responses from the server.
