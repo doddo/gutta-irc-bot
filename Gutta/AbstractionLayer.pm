@@ -49,7 +49,7 @@ sub new
                db => Gutta::DBI->instance(),
     primary_table => 'users',
    parse_response => $params{parse_response},
-         own_nick => $params{own_nick},
+         own_nick => $params{own_nick}||'gutta',
         cmdprefix => qr/^(gutta[,:]\s+|[!])/,
     }, $class;
 
@@ -78,18 +78,6 @@ sub get_cmdprefix
     # this function returns the cmdprefix.
     my $self = shift;
     return $self->{cmdprefix};
-}
-
-sub get_triggers
-{
-    my $self = shift;
-    return $self->{triggers};
-}
-
-sub get_commands
-{
-    my $self = shift;
-    return $self->{commands};
 }
 
 sub _load_triggers
@@ -313,7 +301,7 @@ sub process_msg
         }
         
         # get all commands for all plugins.
-        while (my ($plugin_ref, $commands) = each $self->get_commands())
+        while (my ($plugin_ref, $commands) = each %{$self->{commands}})
         {
             # has plugin $plugin_ref a defined command which match?
             if (exists $$commands{$command})
@@ -340,7 +328,7 @@ sub process_msg
     #
 
     # get all triggers for all plugins.
-    while (my ($plugin_ref, $triggers) = each $self->get_triggers)
+    while (my ($plugin_ref, $triggers) = each %{$self->{triggers}})
     {
         # traverse through all configured triggers (they are regular expressions)
         # and match against incoming message $msg. Any matches - they can be run in
