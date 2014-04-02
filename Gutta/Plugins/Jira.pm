@@ -73,13 +73,9 @@ sub process_msg
         $self->set_config($1, $2);
         return sprintf "msg %s %s: OK - [%s] set to [%s]", $target, $nick, $1, $self->get_config($1);
     } elsif ($rest_of_msg =~ /^feed/){
-
-        foreach my $response ($self->__setup_jira_feed(split(/\s+/,$rest_of_msg)))
-        {
-            return "msg ${target} " . $response;
-        }
+        return "msg ${target} " . $self->__setup_jira_feed(split(/\s+/,$rest_of_msg));
     } elsif ($rest_of_msg =~ /^Dump/i ) {
-        # TODO: fix this
+        # TODO: fix this 
         warn Dumper($self->{data});
     } elsif ($rest_of_msg =~ /^i(?:'m| ?am)\s+(\S+)\b/i ) {
         $self->set_jira_user($nick, $1);
@@ -157,7 +153,6 @@ sub _setup_shema
     return @queries;
 
 }
-
 sub __setup_jira_feed
 {
     # the command line interface
@@ -166,52 +161,21 @@ sub __setup_jira_feed
     my $self = shift;
     shift; #feed
     my $action = shift;
+    my $feedkey = shift;
     my @args = @_;
     my $feed;
-    my $dbh = $self->dbh();
+        print $action . "\n";
 
-    my @servers;  # on what servers (regex) to setup feed
-    my @channels; # what channels on those servers (string)
-    my $feedkey;  # what is the key of the server to add.
-
-    my @responses;
-
-
-    my $ret = GetOptionsFromArray(\@args,
-        'server=s' => \@servers,
-       'channel=s' => \@channels,
-       'feedkey=s' => \$feedkey,
-    );
-
-   
-
-    if ($action =~ '^del')
+    if ($action eq 'del')
     {
-        # delete a feed from the database
-        my $sth = $dbh->prepare('DELETE FROM jira_feeds WHERE feedkey=?');
-        $sth->execute($feedkey) or return "Unable to delete $feedkey: $dbh->errstr";
+        delete($self->{data}{feeds}{$feedkey});
+        $self->save();
         return "undefined feed $feedkey";
-
     } elsif($action eq 'list') {
-        # TODO
         return Dumper($self->{data}{feeds});
     } elsif($action eq 'add') {
-        # configure more jira feeds -- add them to the database.
-        my $sth = $dbh->prepare(qq{INSERT OR IGNORE INTO jira_feeds (feedkey) VALUES(?)});
-        $sth->execute($feedkey);
-        $sth = $dbh->prepare(qq{INSERT OR REPLACE INTO jira_feeds_channels
-                           (feedkey, channel, server) VALUES (?,?,?)});
-
-        # iterate trhrough all the servers and channels
-        foreach my $server_re (@servers)
-        {
-            foreach my $channel (@channels)
-            {
-                push (@responses, "adding feed $feedkey, on channel $channel, on servers matching $server_re...\n");
-                $sth->execute($feedkey,$channel,$server_re) or push (@responses, "Unable to configure feed $feedkey.");
-            }
-        }
-
+        undef($self->{data}{feeds}{$feedkey});
+        $feed = \%{$self->{data}{feeds}{$feedkey}};
     } elsif ($action eq 'test') {
         my ($status, $feeddata) = $self->__download_jira_feed($feedkey);
         if ($status)
@@ -222,7 +186,14 @@ sub __setup_jira_feed
         }
     }
 
-    return @responses;
+    my $ret = GetOptionsFromArray(\@args, $feed,
+        'server=s@',
+        'channel=s@'
+    ) or return "invalid options supplied.";
+
+    $self->save();
+    return sprintf ("adding feed '%s' servers '%s' and channels '%s'",
+                   $feedkey, join(',', @{$$feed{server}}), join(',', @{$$feed{channel}}));
 }
 
 sub _heartbeat_act
@@ -316,17 +287,17 @@ sub monitor_jira_feed
             
             if ($post_timestamp <= $$feeds{$feedkey}{timestamp})  {
                 # Hers what happens with _OLD_ news
-                #warn sprintf ("Jira feed:%s post_timestamp %s is older than latest stored timestamp: %s",
+                #warn sprintf ("Jira feed:%s post_timestamp %s is older than latest stored timestamp: %s", 
                 #                $feedkey,  $post_timestamp,  $$feeds{$feedkey}{timestamp});
                 next;
             } elsif ($nowt->subtract_datetime_absolute($dt)->delta_seconds > 360000) {
                 # and  to prevent gutta from rambling old stuff because he's been out of sync
-                warn sprintf ("Jira feed:%s datetime from post %s is more than 1 hours older than current time %s",
+                warn sprintf ("Jira feed:%s datetime from post %s is more than 1 hours older than current time %s", 
                                 $feedkey, $dt->strftime('%F %T'), $nowt->strftime('%F %T'));
                 next;
            }
            
-           if ($title =~ m{^\s*
+           if ($title =~ m{^\s* 
                     <a\s*href=[^>]+>\s*([^<>]+)\s*</a>\s* # the name
                         ((:?re)?opened|closed|created)\s* # what they do?
             <}ix)
@@ -353,104 +324,54 @@ sub monitor_jira_feed
 
 sub __download_jira_feed
 {
-    my $self = shift;
-    my $server = shift;
-    my $msg = shift;
-    my $nick = shift;
-    my $mask = shift;
-    my $target = shift;
-    my $feedkey = shift;
- 
-    # get the configs from the config table
-    my $password = $self->get_config('password');
-    my $username = $self->get_config('username');
-    my $url = $self->get_config('url');
-
     #Download from the jira feed.
     # it will search for KEY=$feedkay key.is+$feedkey
+    my $self = shift;
+    my $feedkey = shift;
+    my $url = $self->get_config('url');
+
+    # double check that there is a valid URL.
+    return 0, "please set url to download the feed" unless $url;
+
     my $ua = LWP::UserAgent->new;
     my $feedURL = sprintf("https://%s/activity?maxResults=10&streams=key+IS+%s", $url, $feedkey);
 
     my $req = HTTP::Request->new(GET => $feedURL);
-
-    if ($username && $password)
+    if ($self->{data}{'username'} && $self->{data}{'password'})
     {
-        warn("settting authirization headers $username,  $password");
-        $req->authorization_basic($username, $password);
-    } else {
-        warn("going ahead without username/password\n");
+        warn("settting authirization headers $self->{data}{'username'},XXXXXX") ;
+        $req->authorization_basic($self->{data}{'username'},  $self->{data}{'password'});
     }
     my $response =  $ua->request($req);
 
 
-    if ($response->is_success) {
-        return 1, $response->decoded_content;
-    }
-    else {
-        return 0, $response->status_line;
-    }
+     if ($response->is_success) {
+         return 1, $response->decoded_content;
+     }
+     else {
+         return 0, $response->status_line;
+     }
 }
 
 sub get_jira_issue
 {
     my $self = shift;
-    my $server = shift;
-    my $msg = shift;
-    my $nick = shift;
-    my $mask = shift;
-    my $target = shift;
+    # TODO: Fix this later
     my $issue_id = shift;
- 
-    # get the configs from the config table
-    my $password = $self->get_config('password');
-    my $username = $self->get_config('username');
-    my $url = $self->get_config('url');
-
     my $ua = LWP::UserAgent->new;
-    my $req = HTTP::Request->new(GET => "https://${url}/rest/api/2/issue/${issue_id}");
+    my $req = HTTP::Request->new(GET => "https://$self->{data}{url}/rest/api/2/issue/${issue_id}");
     $req->header( 'Content-Type' => 'application/json');
-    if ($username && $password)
+    if ($self->{data}{'username'} && $self->{data}{'password'})
     {
-        warn("settting authirization headers $username,  $password");
-        $req->authorization_basic($username, $password);
-    } else {
-        warn("going ahead without username/password\n");
+        warn("settting authirization headers $self->{data}{'username'},  $self->{data}{'password'}");
+        $req->authorization_basic($self->{data}{'username'},  $self->{data}{'password'});
     }
     my $response =  $ua->request($req);
 
     my $issue = from_json($response->decoded_content, { utf8 => 1 });
 
-    return sprintf("%s: %s (https://%s/issues/%s)", $issue_id, $$issue{'fields'}{'summary'}, $url, $issue_id);
+    return sprintf("%s: %s (https://%s/issues/%s)", $issue_id, $$issue{'fields'}{'summary'}, $self->{data}{url}, $issue_id);
 }
-#
-#   GET THE FEEDS
-#   FROM THE DB.
-#
-
-sub __get_feeds
-{
-    # get the feeds from the feeds table, along with ts when it last updated
-    my $self = shift;
-    my $dbh = $self->dbh();
-
-    my $sth = $dbh->prepare('SELECT feedkey, last_check FROM jira_feeds');
-    
-    return  $sth->fetchall_hashref('feedkey');
-}
-
-sub __get_feeds_channels
-{
-    # get the feeds from the feeds_channels table, with everything on it.
-
-    my $self = shift;
-    my $dbh = $self->dbh();
-
-    my $sth = $dbh->prepare('SELECT feedkey, channel, server, filter FROM jira_feeds_channels');
-    
-    return  $sth->fetchall_hashref('server');
- 
-}
-
 #
 #   work with jira users
 #
