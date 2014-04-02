@@ -1,5 +1,5 @@
 package Gutta::DBI;
-use base 'Class::Singleton';
+#use base 'Class::Singleton';
 
 use warnings;
 use strict;
@@ -20,19 +20,10 @@ Most of the things known by gutta will be stored here for later use.
 
 =cut
 
-sub _new_instance 
+sub instance 
 {
     my $class = shift;
     my $self  = bless { }, $class;
-    my $db    = shift || "Gutta/Data/gutta.db";    
-        
-    $self->{ dbh } = DBI->connect("dbi:SQLite:dbname=${db}","","")
-         || die "Cannot connect to database: $DBI::errstr";
-        
-
-     my $dbh = $self->{dbh};
-     # my $sth = $dbh->prepare("SELECT SQLITE_VERSION()");
-     # $sth->execute();
 
     return $self;
 }
@@ -40,7 +31,10 @@ sub _new_instance
 sub dbh
 {
     my $self = shift;
-    return $self->{dbh};
+    my $db = "Gutta/Data/gutta.db";
+    $self->{ dbh } = DBI->connect("dbi:SQLite:dbname=${db}","","")
+         || die "Cannot connect to database: $DBI::errstr";
+     return $self->{ dbh };
 }
 
 1;
