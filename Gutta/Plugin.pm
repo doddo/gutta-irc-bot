@@ -17,6 +17,7 @@ sub new
                   db => Gutta::DBI->instance(),
     }, $class;
 
+    $self->__setup_config_shema();
     $self->_initialise();
     warn "creating new class\n";
     return $self;
