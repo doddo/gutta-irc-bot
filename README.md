@@ -8,7 +8,7 @@ Install perl and all required modules.
 
 Then it is ready to go.
 
-This version of Gutta requires at least perl 5.16, (but it's not too much work making it run on older perl 5.10 too so maybe in the future it will)
+This version of Gutta requires at least perl 5.10.
 
 
 ### Standalone mode
