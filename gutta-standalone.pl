@@ -132,12 +132,15 @@ sub heartbeat
     print "*** starting heartbeat thread\n";
     while (sleep(3))
     { 
-        $gal->heartbeat();
-        my @irc_cmds = $gal->heartbeat_res($server);
-        foreach my $irc_cmd (@irc_cmds)
-        {
-            printf "♥< %s", $irc_cmd;
-            print $sock $irc_cmd;
-        }
+        eval {
+            $gal->heartbeat();
+            my @irc_cmds = $gal->heartbeat_res($server);
+            foreach my $irc_cmd (@irc_cmds)
+            {
+                printf "♥< %s", $irc_cmd;
+                print $sock $irc_cmd;
+            }
+        };
+        warn $@ if $@; #TODO fix.
     }
 }
