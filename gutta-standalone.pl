@@ -55,7 +55,9 @@ my $sock = new IO::Socket::INET(PeerAddr => $server,
 
 print "*** Logging in to server\n";
 # Log on to the server.
+print " < NICK $own_nick\r\n";
 print $sock "NICK $own_nick\r\n";
+print " < USER $login 8 * :Gutta Standalone\r\n";
 print $sock "USER $login 8 * :Gutta Standalone\r\n";
 
 # Read lines from the server until it tells us we have connected.
@@ -92,21 +94,23 @@ foreach my $channel (@channels)
 while (my $input = <$sock>)
 {
     chop $input;
+
+    # display what the server says.
+    print " > $input\n"; 
+
+
     if ($input =~ /^PING(.*)$/i) 
     {
-        print "PING? PONG!\n"; 
         # We must respond to PINGs to avoid being disconnected.
+        print " < PONG $1\r\n";
         print $sock "PONG $1\r\n";
     } else {
-        # Print the raw line received by the bot.
-        print " > $input\n"; 
 
         # ITS A PRIVMSG 
         if ($input =~ m/^:[^:]+ PRIVMSG/)
         {
             # PARSE THE PRIVMSG...
             my ($msg, $nick, $mask, $target) = $gal->parse_privmsg($input);
-            warn "parsing fiald for $msg $nick $mask $target\n";
 
             # ...and run resulting cmds (if any)
             my @irc_cmds = $gal->process_msg($server, $msg, $nick, $mask, $target);       
