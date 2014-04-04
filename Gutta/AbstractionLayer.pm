@@ -50,14 +50,14 @@ sub new
     primary_table => 'users',
    parse_response => $params{parse_response},
          own_nick => $params{own_nick}||'gutta',
-        cmdprefix => qr/^(gutta[,:]\s+|[!])/,
+        cmdprefix => qr/^(gutta[,:.]\s+|[!])/,
     }, $class;
 
     $self->{triggers} = $self->_load_triggers();
     $self->{commands} = $self->_load_commands();
     if ($params{own_nick})
     {
-        $self->{cmdprefix} = qr/(${params{own_nick}}[.:]\s+|[!])/;
+        $self->{cmdprefix} = qr/(${params{own_nick}}[,:.]\s+|[!])/;
     }
 
     return $self;
