@@ -30,9 +30,9 @@ sub _triggers
     my $self = shift;
 
     return {
-        qr/([a-z0-9_@.ÅÄÖåäö]+?)(\+\+|--)/ => sub { $self->give_karma(@_) },
-                                qr/^srank/ => sub { $self->srank(@_) },
-                                 qr/^rank/ => sub { $self->sank(@_) },
+        qr/([a-z0-9_@.ÅÄÖåäö]+?)(\+\+|--)/i => sub { $self->give_karma(@_) },
+                                qr/^srank/  => sub { $self->srank(@_) },
+                                 qr/^rank/  => sub { $self->sank(@_) },
     };
 }
 
@@ -131,6 +131,5 @@ sub give_karma
     return @responses;
 
 }
-
 
 1;
