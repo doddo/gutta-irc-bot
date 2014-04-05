@@ -89,7 +89,6 @@ foreach my $channel (@channels)
     print " < JOIN $channel\r\n";
 }
 
-
 # Keep reading lines from the server.
 while (my $input = <$sock>)
 {
@@ -98,28 +97,23 @@ while (my $input = <$sock>)
     # display what the server says.
     print " > $input\n"; 
 
-
     if ($input =~ /^PING(.*)$/i) 
     {
         # We must respond to PINGs to avoid being disconnected.
         print " < PONG $1\r\n";
         print $sock "PONG $1\r\n";
-    } else {
-
-        # ITS A PRIVMSG 
-        if ($input =~ m/^:[^:]+ PRIVMSG/)
+    } elsif ($input =~ m/^:[^:]+ PRIVMSG/) {
+        # ITS A PRIVMSG
+        # 
+        # PARSE THE PRIVMSG...
+        my ($msg, $nick, $mask, $target) = $gal->parse_privmsg($input);
+        # ...and run resulting cmds (if any)
+        my @irc_cmds = $gal->process_msg($server, $msg, $nick, $mask, $target);       
+        foreach my $irc_cmd (@irc_cmds)
         {
-            # PARSE THE PRIVMSG...
-            my ($msg, $nick, $mask, $target) = $gal->parse_privmsg($input);
-
-            # ...and run resulting cmds (if any)
-            my @irc_cmds = $gal->process_msg($server, $msg, $nick, $mask, $target);       
-            foreach my $irc_cmd (@irc_cmds)
-            {
-                printf " < %s", $irc_cmd;
-                printf $sock "%s", $irc_cmd;
-                
-            }
+            printf " < %s", $irc_cmd;
+            printf $sock "%s", $irc_cmd;
+            
         }
     }
 }
