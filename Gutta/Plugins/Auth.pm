@@ -52,6 +52,7 @@ sub _commands
         'register' => sub { $self->process_cmd('register', @_) },
          'session' => sub { $self->process_cmd('session', @_) },
           'passwd' => sub { $self->process_cmd('passwd', @_) },
+           'admin' => sub { $self->process_cmd('admin', @_) },
     }
 }
 
@@ -76,7 +77,7 @@ sub process_cmd
     {
         return "msg $nick usage: identify <password>" unless $rest_of_msg;
         warn "idenfiying $nick with [$rest_of_msg]";
-        return $self->identify($nick, $rest_of_msg, $mask);
+        return $self->identify($nick, $nick, $rest_of_msg, $mask);
         
 
     } elsif ($command eq 'session') {
@@ -90,10 +91,42 @@ sub process_cmd
 
     } elsif ($command eq 'register') {
         return "msg $nick usage: register <password>" unless $rest_of_msg;
-        my ($password, $email) = split/\s/, $rest_of_msg;
+        my ($password, $email) = split /\s/, $rest_of_msg;
         return $self->register_nick($nick, $nick, $password, $email);
     } elsif ($command eq 'passwd') {
         return "msg $nick TODO: This feature is not programmed yet";
+    } elsif ($command eq 'admin') {
+        my ($add_or_del, $target_nick) = split /\s+/, $rest_of_msg;
+        if ((($add_or_del eq 'add') or ($add_or_del eq 'del')) and $target_nick)
+        {
+            # OK so the action is either add or del a new user.'
+            # next check is to see whether the user calling... 
+
+            #  a) has session (is logged in)
+            return "msg $target please identify first." unless $self->has_session($nick, $mask); 
+            #  b) is an admin henself.
+            my $nick_reginfo = $self->{users}->get_user($nick);
+            print Dumper($nick_reginfo);
+            return "msg $target only admins may add or del admins." unless $$nick_reginfo{'admin'};
+            print Dumper($nick_reginfo);
+
+            # Then the user to add, needs to be a registered user.
+            return "msg $target tell $target_nick hen must register first" unless $self->{users}->get_user($target_nick);
+            
+            if ($add_or_del eq 'add')
+            {
+                # OK now make the user admin.
+                $self->{users}->make_admin($target_nick);
+            } else {
+                # OR dont make the user admin.
+                $self->{users}->unmake_admin($target_nick);
+            }
+            return "msg $target OK.";
+
+        } else {
+            # help the user with syntax help.
+            return "msg $target Like this: admin add|del <nick>";
+        }
     }
 
 }

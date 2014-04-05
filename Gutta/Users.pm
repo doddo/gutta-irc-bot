@@ -59,7 +59,9 @@ sub _dbinit
                           salt INTEGER NOT NULL,
                        created INTEGER NOT NULL,
                     last_login INTEGER, 
-          last_password_change INTEGER  )
+          last_password_change INTEGER,
+                         admin INTEGER DEFAULT 0
+                  )
     };
 
     my $sth = $dbh->prepare($query) or die "unable to run: $query\n";
@@ -117,6 +119,27 @@ sub usermod
 
 }
 
+sub make_admin
+{
+   # make an user an admin
+   my $self = shift;
+   my $nick = shift;
+   my $dbh = $self->dbh();
+
+   my $sth = $dbh->prepare('update users set admin = 1 where nick = ?');
+   $sth->execute($nick);
+}
+
+sub unmake_admin
+{
+   # make an user an admin
+   my $self = shift;
+   my $nick = shift;
+   my $dbh = $self->dbh();
+
+   my $sth = $dbh->prepare('update users set admin = 0 where nick = ?');
+   $sth->execute($nick);
+}
 
 sub passwd
 {
@@ -140,15 +163,13 @@ sub get_user
     my $nick = shift;
     my $dbh = $self->dbh();    
 
-    my $sth = $dbh->prepare(qq{SELECT nick, email, created, salt, password FROM users WHERE nick = ?});
+    my $sth = $dbh->prepare(qq{SELECT nick, email, created, salt, password, admin FROM users WHERE nick = ?});
     $sth->execute($nick);
 
     my $userdata =  $sth->fetchall_hashref('nick');
 
     return undef if $sth->rows == 0;
-    return $userdata;
-    
-
+    return $$userdata{$nick};
 }
 
 sub get_users
@@ -190,7 +211,5 @@ sub has_session
         return undef; # False
     }
 }
-
-
 
 1;
