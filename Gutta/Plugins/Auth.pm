@@ -169,7 +169,7 @@ sub identify
     if (my $user = $self->{users}->get_user($nick))
     {      
         warn Dumper($user);
-        if ($self->{users}->_hash($password, $$user{$nick}{salt}) eq $$user{$nick}{password})
+        if ($self->{users}->_hash($password, $$user{salt}) eq $$user{password})
         {
             $self->_login_user($nick, $mask) or return "msg $target something unknown went wrong\n";
             return "msg $target OK - $nick logged in."
