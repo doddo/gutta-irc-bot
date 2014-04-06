@@ -25,7 +25,6 @@ sub new
 
     my $self = bless {
                db => Gutta::DBI->instance(),
-    primary_table => 'users'
     }, $class;
 
     $self->_dbinit('users');
