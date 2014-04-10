@@ -19,7 +19,7 @@ etc
 =cut
 
 
-sub new 
+sub new
 {
     my $class = shift;
 
@@ -43,7 +43,7 @@ sub dbh
 
 sub _dbinit
 {
-    # DBinit provides support for to initialise their db:s, 
+    # DBinit provides support for to initialise their db:s,
     # it runs the sql from the _setup_shema method
     # the $self->setup_shema() class.
     # this can be called multiple times by passing different tables to setup_schema
@@ -57,7 +57,7 @@ sub _dbinit
                          email TEXT,
                           salt INTEGER NOT NULL,
                        created INTEGER NOT NULL,
-                    last_login INTEGER, 
+                    last_login INTEGER,
           last_password_change INTEGER,
                          admin INTEGER DEFAULT 0
                   )
@@ -86,7 +86,7 @@ sub useradd
     my $password = shift;
     my $email = shift;
     my $salt = "Bamse";
-    my $dbh = $self->dbh();    
+    my $dbh = $self->dbh();
 
     my $sth = $dbh->prepare(qq{
         INSERT INTO users (nick, password, email, salt, created, last_password_change)
@@ -101,7 +101,7 @@ sub userdel
     # del a user
     my $self = shift;
     my $nick = shift;
-    my $dbh = $self->dbh();    
+    my $dbh = $self->dbh();
 
     my $sth = $dbh->prepare(qq{DELETE FROM users where name = ?});
     $sth->execute($nick);
@@ -143,12 +143,12 @@ sub unmake_admin
 sub passwd
 {
     # set new password, but NOT validate the old one (because thats going to happen in the auth module)
-    # Maybe next versuib will support this.   
+    # Maybe next versuib will support this.
     my $self = shift;
     my $nick = shift;
     my $password = shift;
     my $salt = "TODO";
-    my $dbh = $self->dbh();    
+    my $dbh = $self->dbh();
 
     my $sth = $dbh->prepare(qq{UPDATE users SET password = ?, salt = ? WHERE nick = ?});
     $sth->execute($self->_hash($password, $salt), $salt, $nick);
@@ -160,7 +160,7 @@ sub get_user
     # returns user
     my $self = shift;
     my $nick = shift;
-    my $dbh = $self->dbh();    
+    my $dbh = $self->dbh();
 
     my $sth = $dbh->prepare(qq{SELECT nick, email, created, salt, password, admin FROM users WHERE nick = ?});
     $sth->execute($nick);
@@ -176,7 +176,7 @@ sub get_users
     # returns user
     my $self = shift;
     my $nick = shift;
-    my $dbh = $self->dbh();    
+    my $dbh = $self->dbh();
 
     my $sth = $dbh->prepare(qq{SELECT nick, email, created FROM users});
     $sth->execute();
