@@ -110,7 +110,7 @@ sub _triggers
     my $self = shift;
 
     return {
-        qr/[A-Z]{3,30}-[0-9]{1,7}/ => sub { $self->get_jira_issue(@_) },
+        qr/[A-Z]{3,30}-[0-9]++(?!:)/ => sub { $self->get_jira_issue(@_) },
     };
 }
 
@@ -287,8 +287,8 @@ sub monitor_jira_feed
             
             if ($post_timestamp <= $$feeds{$feedkey}{timestamp})  {
                 # Hers what happens with _OLD_ news
-                #warn sprintf ("Jira feed:%s post_timestamp %s is older than latest stored timestamp: %s", 
-                #                $feedkey,  $post_timestamp,  $$feeds{$feedkey}{timestamp});
+                warn sprintf ("Jira feed:%s post_timestamp %s is older than latest stored timestamp: %s", 
+                                $feedkey,  $post_timestamp,  $$feeds{$feedkey}{timestamp});
                 next;
             } elsif ($nowt->subtract_datetime_absolute($dt)->delta_seconds > 360000) {
                 # and  to prevent gutta from rambling old stuff because he's been out of sync
@@ -329,6 +329,8 @@ sub __download_jira_feed
     my $self = shift;
     my $feedkey = shift;
     my $url = $self->get_config('url');
+    my $username = $self->get_config('username');
+    my $password = $self->get_config('password');
 
     # double check that there is a valid URL.
     return 0, "please set url to download the feed" unless $url;
@@ -337,10 +339,10 @@ sub __download_jira_feed
     my $feedURL = sprintf("https://%s/activity?maxResults=10&streams=key+IS+%s", $url, $feedkey);
 
     my $req = HTTP::Request->new(GET => $feedURL);
-    if ($self->{data}{'username'} && $self->{data}{'password'})
+    if ($username && $password)
     {
-        warn("settting authirization headers $self->{data}{'username'},XXXXXX") ;
-        $req->authorization_basic($self->{data}{'username'},  $self->{data}{'password'});
+        warn("settting authirization headers $username and $password") ;
+        $req->authorization_basic($username, $password);
     }
     my $response =  $ua->request($req);
 
@@ -356,21 +358,30 @@ sub __download_jira_feed
 sub get_jira_issue
 {
     my $self = shift;
-    # TODO: Fix this later
+    my $server = shift;
+    my $msg = shift;
+    my $nick = shift;
+    my $mask = shift;
+    my $target = shift;
     my $issue_id = shift;
+    my $url = $self->get_config('url');
+    my $username = $self->get_config('username');
+    my $password = $self->get_config('password');
+
     my $ua = LWP::UserAgent->new;
-    my $req = HTTP::Request->new(GET => "https://$self->{data}{url}/rest/api/2/issue/${issue_id}");
+    my $req = HTTP::Request->new(GET => "https://${url}/rest/api/2/issue/${issue_id}");
     $req->header( 'Content-Type' => 'application/json');
-    if ($self->{data}{'username'} && $self->{data}{'password'})
+    if ($username && $password)
     {
-        warn("settting authirization headers $self->{data}{'username'},  $self->{data}{'password'}");
-        $req->authorization_basic($self->{data}{'username'},  $self->{data}{'password'});
+        warn("settting authirization headers $self->{data}{'username'},XXXXXX") ;
+        $req->authorization_basic($username, $password);
     }
+
     my $response =  $ua->request($req);
 
     my $issue = from_json($response->decoded_content, { utf8 => 1 });
 
-    return sprintf("%s: %s (https://%s/issues/%s)", $issue_id, $$issue{'fields'}{'summary'}, $self->{data}{url}, $issue_id);
+    return sprintf("msg %s %s: %s (https://%s/issues/%s)", $target, $issue_id, $$issue{'fields'}{'summary'}, $url, $issue_id);
 }
 #
 #   work with jira users
@@ -395,17 +406,17 @@ sub get_jira_user
     my $self = shift;
     my $nick = shift;
     my $dbh = $self->dbh();
+    warn ("GETTING THE USERNAME FOR $nick ... \n");
 
-    my $sth = $dbh->prepare('SELECT jira_username from jira_users WHERE nick = ?');
+    my $sth = $dbh->prepare('SELECT jira_username from jira_users WHERE nick = ?') or warn $dbh->errstr;
     # TODO handle errors.
-    $sth->execute($nick);
+    $sth->execute($nick) or warn $dbh->errstr;
 
 
     my ($jira_username) = $sth->fetchrow_array();
+    warn ("GOT $jira_username \n");
 
     return $jira_username;
 }
-
-
 
 1;
