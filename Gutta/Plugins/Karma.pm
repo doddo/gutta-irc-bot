@@ -97,7 +97,7 @@ sub give_karma
     my @responses;
 
     # OK parse the $msg (could be done better in the future)
-    while ($msg =~ s/([a-z0-9_@.ÅÄÖåäö]+?)(\+\+|--)//)
+    while ($msg =~ s/([a-z0-9_@.ÅÄÖåäö]+?)(\+\+|--)//i)
     {
         my $item = lc($1);
         my $modifier = lc($2);
