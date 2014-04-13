@@ -64,22 +64,21 @@ print " < USER $login 8 * :Gutta Standalone\r\n";
 print $sock "USER $login 8 * :Gutta Standalone\r\n";
 
 # Read lines from the server until it tells us we have connected.
-while (my $input = <$sock>)
+while (my $message = <$sock>)
 {
-    printf " > %s", $input;
+    printf " > %s", $message;
     # Check the numerical responses from the server.
-    if ($input =~ /004/) {
+    if ($message =~ /004/) {
         # We are now logged in.
         last;
     }
-    elsif ($input =~ /433/) {
+    elsif ($message =~ /433/) {
         die "Nickname is already in use.";
     }
 }
 
 
 print "*** logged in !!\n";
-
 # Start the heartbeat thread
 async(\&heartbeat, $sock, $server)->detach;
 
@@ -88,7 +87,6 @@ async(\&heartbeat, $sock, $server)->detach;
 async(\&plugin_responses, $sock, $server)->detach;
 print "*** Logged in to server, joining channels\n";
 # Join the channels.
-
 foreach my $channel (@channels)
 {
     print $sock "JOIN $channel\r\n";
@@ -96,30 +94,24 @@ foreach my $channel (@channels)
 }
 
 # Keep reading lines from the server.
-while (my $input = <$sock>)
+while (my $message = <$sock>)
 {
-    chop $input;
+    chop $message;
 
     # display what the server says.
-    print " > $input\n";
+    print " > $message\n";
 
-    if ($input =~ /^PING(.*)$/i)
+    if ($message =~ /^PING(.*)$/i)
     {
         # We must respond to PINGs to avoid being disconnected.
         print " < PONG $1\r\n";
         print $sock "PONG $1\r\n";
-    } elsif ($input =~ m/^:[^:]+ PRIVMSG/) {
-        # ITS A PRIVMSG
-        #
-        # PARSE THE PRIVMSG...
-        my ($msg, $nick, $mask, $target) = $gal->parse_privmsg($input);
-        # ...and run resulting cmds (if any)
-        my @irc_cmds = $gal->process_msg($server, $msg, $nick, $mask, $target);
+    } else {
+        my @irc_cmds = $gal->process_msg($server,$message);
         foreach my $irc_cmd (@irc_cmds)
         {
             printf " < %s", $irc_cmd;
             printf $sock "%s", $irc_cmd;
-            
         }
     }
 }

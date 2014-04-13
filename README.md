@@ -23,14 +23,6 @@ then (in the future)
 
 interface with gutta with guttacli (or through plugins)
 
-### Run inside of Irssi
-
-Put the whole thing under -> ~/.irssi/scripts
-
-do /load gutta.pl
-
-and then its good to go.
-
 
 ## Plugins
 
@@ -42,7 +34,7 @@ The plugins are expected to return a conventional irc message and supports a mul
 
 ### Writing Plugins
 
-Writing plugins for Gutta is easy.
+Writing plugins for Gutta is both easy and fun.
 
 Put them in the Gutta::Plugins folder, name them
 Gutta::Plugins::Foo, and inherit Gutta::Plugin.
@@ -87,6 +79,5 @@ sub _commands
     }
 }
 1;
-
 
 ```

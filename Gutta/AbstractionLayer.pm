@@ -5,7 +5,9 @@ use warnings;
 use threads;
 use Thread::Queue;
 use Gutta::DBI;
+use Gutta::Parser;
 use Data::Dumper;
+use Switch;
 
 use Module::Pluggable search_path => "Gutta::Plugins",
                       instantiate => 'new';
@@ -44,9 +46,11 @@ sub new
     my %params = @_;
     my $self = bless {
                db => Gutta::DBI->instance(),
+           parser => Gutta::Parser->new(),
    parse_response => $params{parse_response},
          own_nick => $params{own_nick}||'gutta',
     workers2start => $params{workers2start}||4,
+          workers => [],
         cmdprefix => qr/^(gutta[,:.]\s+|[!])/,
     }, $class;
 
@@ -62,15 +66,28 @@ sub new
     }
 
     # Fire up the workers
-    for (my $i=0; $i<=$self->{workers2start}; $i++)
+    $self->start_workers($self->{workers2start});
+
+    return $self;
+}
+
+sub start_workers
+{
+    # This sub fires up more workers and pushes them to the list of workers.
+    # the $self->{workers} list.
+    # if called with no arguments, start excactly one more worker.
+    my $self = shift;
+    my $workers2start = shift||1;
+
+    # Start more workers.
+    for (my $i = scalar @{$self->{workers}}||0; $i<=$workers2start; $i++)
     {
         # and save to a list
         push @{$self->{workers}}, threads->create({void => 1}, \&plugin_worker, $self, $i + 1)->detach();
 
     }
-
-    return $self;
 }
+
 
 sub set_cmdprefix
 {
@@ -143,7 +160,7 @@ sub heartbeat_res
     # if running on standalone mode, then all these respnses needs to be
     # translated to the RFC 2812 syntax, so;
     #    if parse_response => 1 is sent to constructor fix the grammar.
-    return $self->_parse_response(@responses) if $self->{parse_response};
+    return $self->{parser}->parse_response(@responses) if $self->{parse_response};
 
     # else just return it as is.
     return @responses;
@@ -161,60 +178,6 @@ sub plugin_res
     # return x responses from the plugin workers to the main prog.
 
     return $RESPONSES->dequeue_nb($max_responses);
-
-}
-
-sub _parse_response
-{
-    # Get the responses from the plugins,
-    # and make sure that they follow rfc2812 grammar spec
-    #
-    #  ie:
-    #  msg #test123123 bla bla bla bla
-    #       becomes:
-    #  PRIVMSG #test123123 :bla bla bla bla
-    #
-    #  and:
-    #
-    #  action #test123123 kramar gutta
-    #       becomes:
-    #  PRIVMSG #test123123 :ACTION  kramar gutta
-    #
-    my $self = shift;
-    my @in_msgs = @_; # incoming messages from plugins
-    my @out_msgs; # return this
-
-    foreach my $msg (@in_msgs)
-    {
-       next unless $msg;
-       $msg =~ s/^msg (\S+) /PRIVMSG $1 :/i;
-       $msg =~ s/^me (\S+) /PRIVMSG $1 :\001ACTION /i;
-       $msg =~ s/^action (\S+) /PRIVMSG $1 :\001ACTION /i;
-       $msg .= "\r\n";
-       push @out_msgs, $msg;
-    }
-
-    return @out_msgs;
-}
-
-sub parse_privmsg
-{
-    #parses the privmsg:s from the server and returns in a
-    #format which gutta can understand.
-    #
-    #:doddo_!~doddo@localhost PRIVMSG #test123123 :doddo2000 (2)
-    #:irc.the.net 250 gutta :Highest connection count: 3 (9 connections received)
-    #
-    my $self = shift;
-    $_ = shift;
-    
-    m/^:(?<nick>[^!]++)!  # get the nick
-         (?<mask>\S++)\s  # get the hostmask
-               PRIVMSG\s  # this is how we know its a PRIVMSG
-        (?<target>\S+)\s: # this is the target nick or chan
-              (?<msg>.+)$ # rest of line would be msg /x;
-     
-    return $+{msg}, $+{nick}, $+{mask}, $+{target};
 }
 
 sub _load_commands
@@ -265,18 +228,48 @@ sub plugin_worker
             push @responses, $PLUGINS{$plugin_ref}->trigger($command_or_trigger,$server,$msg,$nick,$mask,$target,$rest_of_msg);
         }
 
-        @responses =  $self->_parse_response(@responses) if $self->{parse_response};
+        @responses =  $self->{parser}->parse_response(@responses) if $self->{parse_response};
 
         # enqueue processed responses to the response queue
         foreach my $response (@responses)
         {
             $RESPONSES->enqueue($response);
         }
-
     }
 }
 
+
 sub process_msg
+{
+    # The PROCESS MSG takes a look at all incoming IRC messages (almost), and
+    # based on what is sent to it, acts accordingly,
+    # 
+    # Typically the responses gets pushed to a queue by one of the workers, but
+    # the possibility exists for GAL to handle messages directly, so this sub
+    # therefore returns a list of @irc_cmds, even if its typically empty most
+    # of the times.
+    #
+    my $self = shift;
+    my $server = shift;
+    my $message = shift;
+    my @irc_cmds;
+    my @payload,
+    
+    # ask the parser to parse the incoming $message from the server.
+    my ($msgtype, @payload) = $self->{parser}->parse($message);
+
+    print "ITS A $msgtype\n" if $msgtype;
+
+    switch ($msgtype)
+    {
+        case 'PRIVMSG' { @irc_cmds = $self->process_privmsg($server, @payload) }
+
+    }
+
+    return @irc_cmds;
+}
+
+sub process_privmsg
 {
     #
     #  process incoming message $msg (rest is "context" ;)
@@ -383,7 +376,7 @@ sub process_msg
     # if running on standalone mode, then all these respnses needs to be
     # translated to the RFC 2812 syntax, so;
     #    if parse_response => 1 is sent to constructor fix the grammar.
-    return $self->_parse_response(@responses) if $self->{parse_response};
+    return $self->{parser}->parse_response(@responses) if $self->{parse_response};
 
     # else just return it as is.
     return @responses;
