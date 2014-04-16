@@ -36,9 +36,11 @@ This is to  the glue between the irc and the plugins
 my @PLUGINS = plugins();
 my %PLUGINS = map { ref $_ => $_ } @PLUGINS;
 
-# The plugins tasks queue
+# The plugins tasks queues
 my $TASKQUEUE = Thread::Queue->new();
+my $HEARTBEAT = Thread::Queue->new();
 my $RESPONSES = Thread::Queue->new();
+
 
 sub new
 {
@@ -51,6 +53,7 @@ sub new
          own_nick => $params{own_nick}||'gutta',
     workers2start => $params{workers2start}||4,
           workers => [],
+       heartbeats => [],
         cmdprefix => qr/^(gutta[,:.]\s+|[!])/,
     }, $class;
 
@@ -88,6 +91,35 @@ sub start_workers
     }
 }
 
+sub start_heartbeat
+{
+    # This jobs starts the heartbeats for $server
+    # and it will pass this along ping pong to the workers.
+    my $self = shift;
+    my $server = shift;
+    
+    # must pass $server to threads.
+    unless ($server)
+    {
+        warn "missing heartbeat args...\n"; 
+        return;
+    }
+
+    # initialise heartbeat therad if not started already.
+    if ($server ~~ @{$self->{heartbeats}})
+    {
+        warn "heartbeats for thet server $server started already.. Next version maybe will be able to restart it\n";
+    } else {
+        # Define job for all the plugins.
+        foreach my $plugin_ref (keys %PLUGINS)
+        {
+            print "enwueing $plugin_ref for $server \n";
+            $HEARTBEAT->enqueue(['heartbeat', $plugin_ref, '', $server]);
+        }
+        # and save to a list
+        push @{$self->{heartbeats}}, threads->create({void => 1}, \&heartbeats)->detach();
+    }
+}
 
 sub set_cmdprefix
 {
@@ -131,41 +163,6 @@ sub _load_triggers
     return \%triggers;
 }
 
-sub heartbeat
-{
-    # pass the heartbeat to the plugins.
-    # heartbeats are things which gets called on a regular basis,
-    # then it is up to each plugin to say what interval to act
-    # then gets called the _heartbeat_act which typically does scheduled things
-    my $self = shift;
-    foreach my $plugin (@PLUGINS)
-    {
-        $plugin->heartbeat();
-    }
-}
-
-sub heartbeat_res
-{
-    # Heartbeat res retrns result of the plugins and gets called per connected to
-    # server.
-    my $self = shift;
-    my $server = shift;
-    my @responses;
-
-    foreach my $plugin (@PLUGINS)
-    {
-        push @responses, $plugin->heartbeat_res();
-    }
-
-    # if running on standalone mode, then all these respnses needs to be
-    # translated to the RFC 2812 syntax, so;
-    #    if parse_response => 1 is sent to constructor fix the grammar.
-    return $self->{parser}->parse_response(@responses) if $self->{parse_response};
-
-    # else just return it as is.
-    return @responses;
-}
-
 sub plugin_res
 {
     # The plugins are triggered by a variety of workers
@@ -205,6 +202,27 @@ sub _load_commands
     return \%commands;
 }
 
+sub heartbeats
+{
+    # This is the heartbeats. It moves tasks
+    # from HEARTBEATS queue to the TASKQUEUE
+    #
+    my $self = shift;
+    warn "starting heartneats\n";
+    
+    while (sleep 3)
+    {
+            warn "HELLO " . $HEARTBEAT->pending() . " \n";
+        foreach my $inc_msg ($HEARTBEAT->dequeue_nb(scalar @PLUGINS))
+        {
+            # Grab all messages from HEARTBEAT queue.
+            # And put them back into the TASKQUEUE
+            warn "enqueueing something from the plugins\n";
+            $TASKQUEUE->enqueue($inc_msg);
+        }
+    }
+}
+
 sub plugin_worker
 {
     # The plugin workers will process all the incoming triggers/commands
@@ -220,14 +238,25 @@ sub plugin_worker
         my @responses;
         my ($tasktype, $plugin_ref, $command_or_trigger, $server, $msg, $nick, $mask,
            $target, $rest_of_msg) =  @{$inc_msg};
-        print "worker #$no got a new msg of type $tasktype to process\n";
+        print "worker #$no got a new msg of type $tasktype to process for $plugin_ref\n";
         if ($tasktype eq 'command')
         {
+            # Start the plugin "$plugin_ref";s  command. pass along all variables to it.
             push @responses, $PLUGINS{$plugin_ref}->command($command_or_trigger,$server,$msg,$nick,$mask,$target,$rest_of_msg);
+            # Start the plugin "$plugin_ref";s triggers. pass along all variables to it.
         } elsif ($tasktype eq 'trigger'){
             push @responses, $PLUGINS{$plugin_ref}->trigger($command_or_trigger,$server,$msg,$nick,$mask,$target,$rest_of_msg);
+        } elsif ($tasktype eq 'heartbeat') {
+            # put a heartbeat into the plugin
+            #
+            $PLUGINS{$plugin_ref}->heartbeat();
+            push @responses, $PLUGINS{$plugin_ref}->heartbeat_res($server);
+            # OK the heartbeat have been run, so it can be put back into
+            # the queue
+            $HEARTBEAT->enqueue($inc_msg);
         }
-
+        
+        # here we prepare the response standardised.
         @responses =  $self->{parser}->parse_response(@responses) if $self->{parse_response};
 
         # enqueue processed responses to the response queue
@@ -243,7 +272,7 @@ sub process_msg
 {
     # The PROCESS MSG takes a look at all incoming IRC messages (almost), and
     # based on what is sent to it, acts accordingly,
-    # 
+    #
     # Typically the responses gets pushed to a queue by one of the workers, but
     # the possibility exists for GAL to handle messages directly, so this sub
     # therefore returns a list of @irc_cmds, even if its typically empty most
@@ -253,7 +282,6 @@ sub process_msg
     my $server = shift;
     my $message = shift;
     my @irc_cmds;
-    my @payload,
     
     # ask the parser to parse the incoming $message from the server.
     my ($msgtype, @payload) = $self->{parser}->parse($message);

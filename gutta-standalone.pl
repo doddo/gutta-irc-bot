@@ -79,12 +79,13 @@ while (my $message = <$sock>)
 
 
 print "*** logged in !!\n";
-# Start the heartbeat thread
-async(\&heartbeat, $sock, $server)->detach;
-
 
 # Start the plugin responses
 async(\&plugin_responses, $sock, $server)->detach;
+
+print "*** staring heartneat thread\n";
+$gal->start_heartbeat($server);
+
 print "*** Logged in to server, joining channels\n";
 # Join the channels.
 foreach my $channel (@channels)
@@ -113,30 +114,6 @@ while (my $message = <$sock>)
             printf " < %s", $irc_cmd;
             printf $sock "%s", $irc_cmd;
         }
-    }
-}
-
-sub heartbeat
-{
-    # the heartbeat therad sub function.
-    # on an interval of 3 seconds, send a heartbeat to all of the
-    # plugins heartbeat methods trhough Gutta::Abstractionlayer.
-    #
-    my $sock = shift;
-    my $server = shift;
-    print "*** starting heartbeat thread\n";
-    while (sleep(3))
-    {
-        eval {
-            $gal->heartbeat();
-            my @irc_cmds = $gal->heartbeat_res($server);
-            foreach my $irc_cmd (@irc_cmds)
-            {
-                printf "♥< %s", $irc_cmd;
-                print $sock $irc_cmd;
-            }
-        };
-        warn $@ if $@; #TODO fix.
     }
 }
 
