@@ -8,6 +8,7 @@ use Gutta::DBI;
 use Gutta::Parser;
 use Data::Dumper;
 use Switch;
+use Log::Log4perl;
 
 use Module::Pluggable search_path => "Gutta::Plugins",
                       instantiate => 'new';
@@ -35,11 +36,15 @@ This is to  the glue between the irc and the plugins
 # Getting the PLUGINS
 my @PLUGINS = plugins();
 my %PLUGINS = map { ref $_ => $_ } @PLUGINS;
+my $PLUGINS = \%PLUGINS;
 
 # The plugins tasks queues
 my $TASKQUEUE = Thread::Queue->new();
 my $HEARTBEAT = Thread::Queue->new();
 my $RESPONSES = Thread::Queue->new();
+
+# The logger
+my $log = Log::Log4perl->get_logger(__PACKAGE__);
 
 
 sub new
@@ -86,7 +91,7 @@ sub start_workers
     for (my $i = scalar @{$self->{workers}}||0; $i<=$workers2start; $i++)
     {
         # and save to a list
-        push @{$self->{workers}}, threads->create({void => 1}, \&plugin_worker, $self, $i + 1)->detach();
+        push @{$self->{workers}}, threads->create({void => 1}, \&plugin_worker, $self, $i + 1, $PLUGINS)->detach();
 
     }
 }
@@ -101,7 +106,7 @@ sub start_heartbeat
     # must pass $server to threads.
     unless ($server)
     {
-        warn "missing heartbeat args...\n"; 
+        warn "missing heartbeat args...\n";
         return;
     }
 
@@ -113,7 +118,7 @@ sub start_heartbeat
         # Define job for all the plugins.
         foreach my $plugin_ref (keys %PLUGINS)
         {
-            print "enwueing $plugin_ref for $server \n";
+            $log->debug("enwueing $plugin_ref for $server");
             $HEARTBEAT->enqueue(['heartbeat', $plugin_ref, '', $server]);
         }
         # and save to a list
@@ -146,17 +151,17 @@ sub _load_triggers
     my $self = shift;
     
     my %triggers;
-    warn "GETTING TRIGGERS !!!\n";
+    $log->debug("GETTING TRIGGERS !!!");
 
     while (my ($plugin_key, $plugin) = each %PLUGINS)
     {
         next unless $plugin->can('_triggers');
         if (my $t = $plugin->_triggers())
         {
-            warn sprintf "loaded %i triggers for %s\n", scalar keys %{$t}, $plugin_key;
+            $log->info(sprintf "loaded %i triggers for %s\n", scalar keys %{$t}, $plugin_key);
             $triggers{$plugin_key} = $t
         } else {
-            warn sprintf "loaded 0 commands for %s\n", $plugin_key;
+            $log->debug(sprintf "loaded 0 triggers for %s\n", $plugin_key);
         }
     }
 
@@ -185,17 +190,17 @@ sub _load_commands
     my $self = shift;
     
     my %commands;
-    warn "GETTING COMMANDS !!!\n";
+    $log->debug("GETTING COMMANDS !!!");
 
     while (my ($plugin_key, $plugin) = each %PLUGINS)
     {
         next unless $plugin->can('_commands');
         if (my $t = $plugin->_commands())
         {
-            warn sprintf "loaded %i commands for %s\n", scalar keys %{$t}, $plugin_key;
+            $log->info(sprintf "loaded %i commands for %s", scalar keys %{$t}, $plugin_key);
             $commands{$plugin_key} = $t;
         } else {
-            warn sprintf "loaded 0 commands for %s\n", $plugin_key;
+            $log->debug(sprintf "loaded 0 commands for %s", $plugin_key);
         }
     }
 
@@ -208,16 +213,15 @@ sub heartbeats
     # from HEARTBEATS queue to the TASKQUEUE
     #
     my $self = shift;
-    warn "starting heartneats\n";
+    $log->info("*** starting heartbeats");
     
     while (sleep 3)
     {
-            warn "HELLO " . $HEARTBEAT->pending() . " \n";
+        $log->trace("heartbeat thread is going to queue " . $HEARTBEAT->pending() . " pending tasks");
         foreach my $inc_msg ($HEARTBEAT->dequeue_nb(scalar @PLUGINS))
         {
             # Grab all messages from HEARTBEAT queue.
             # And put them back into the TASKQUEUE
-            warn "enqueueing something from the plugins\n";
             $TASKQUEUE->enqueue($inc_msg);
         }
     }
@@ -230,29 +234,39 @@ sub plugin_worker
     # which is otherwise a big risk.
     my $self = shift;
     my $no = shift;
+    my $plugins = shift;
 
-    print "*** Plugin Worker no#${no} is open and ready for business\n";
+    $log->info("*** Plugin Worker no#${no} is open and ready for business");
 
     while (my $inc_msg = $TASKQUEUE->dequeue())
     {
         my @responses;
         my ($tasktype, $plugin_ref, $command_or_trigger, $server, $msg, $nick, $mask,
            $target, $rest_of_msg) =  @{$inc_msg};
-        print "worker #$no got a new msg of type $tasktype to process for $plugin_ref\n";
+        $log->trace("worker #$no got a new msg of type $tasktype to process for $plugin_ref");
         if ($tasktype eq 'command')
         {
-            # Start the plugin "$plugin_ref";s  command. pass along all variables to it.
-            push @responses, $PLUGINS{$plugin_ref}->command($command_or_trigger,$server,$msg,$nick,$mask,$target,$rest_of_msg);
-            # Start the plugin "$plugin_ref";s triggers. pass along all variables to it.
+            eval {
+                # Start the plugin "$plugin_ref";s  command. pass along all variables to it.
+                push @responses, $$plugins{$plugin_ref}->command($command_or_trigger,$server,$msg,$nick,$mask,$target,$rest_of_msg);
+            };
+            warn ($@) if $@; # TODO fix.
         } elsif ($tasktype eq 'trigger'){
-            push @responses, $PLUGINS{$plugin_ref}->trigger($command_or_trigger,$server,$msg,$nick,$mask,$target,$rest_of_msg);
+            eval {
+                # Start the plugin "$plugin_ref";s triggers. pass along all variables to it.
+                push @responses, $$plugins{$plugin_ref}->trigger($command_or_trigger,$server,$msg,$nick,$mask,$target,$rest_of_msg);
+            };
+            warn ($@) if $@; # TODO fix.
         } elsif ($tasktype eq 'heartbeat') {
             # put a heartbeat into the plugin
             #
-            $PLUGINS{$plugin_ref}->heartbeat();
-            push @responses, $PLUGINS{$plugin_ref}->heartbeat_res($server);
-            # OK the heartbeat have been run, so it can be put back into
-            # the queue
+            eval {
+                $PLUGINS{$plugin_ref}->heartbeat();
+                push @responses, $$plugins{$plugin_ref}->heartbeat_res($server);
+                # OK the heartbeat have been run, so it can be put back into
+                # the queue
+            };
+            warn ($@) if $@; # TODO fix.
             $HEARTBEAT->enqueue($inc_msg);
         }
         
@@ -286,7 +300,7 @@ sub process_msg
     # ask the parser to parse the incoming $message from the server.
     my ($msgtype, @payload) = $self->{parser}->parse($message);
 
-    print "ITS A $msgtype\n" if $msgtype;
+    $log->debug("ITS A $msgtype") if $msgtype;
 
     switch ($msgtype)
     {
@@ -365,7 +379,7 @@ sub process_privmsg
                 # removing any crap from the msg.
                 chomp($rest_of_msg);
                 # OK now we know what to do, what plugin to do it with, and the
-                # message to pass to the plugin etc. At this point it gets added 
+                # message to pass to the plugin etc. At this point it gets added
                 # to the queue.
                 $TASKQUEUE->enqueue(['command', $plugin_ref, $command,$server,$msg,$nick,$mask,$target,$rest_of_msg]);
             }
@@ -387,7 +401,7 @@ sub process_privmsg
             if ($msg  =~ /$regex_trigger/)
             {
                 # Here a regex matched. That was from $plugin_ref.
-                warn sprintf 'trigger "%s" matched "%s" for plugin %s.', $regex_trigger, $&, $plugin_ref;
+                $log->debug(printf 'trigger "%s" matched "%s" for plugin %s.', $regex_trigger, $&, $plugin_ref);
                 # OK now we know what to do, what plugin to do it with, and the
                 # message to pass to plugin etc. Add it to the queue of tasks to do
                 $TASKQUEUE->enqueue(['trigger', $plugin_ref, $regex_trigger,$server,$msg,$nick,$mask,$target,$&]);
@@ -398,7 +412,7 @@ sub process_privmsg
     # TODO: past this point, no plugin no longer returns anything here,
     # BUT since some commands will at some point get parsed by other things than
     # plugins (for diagnosis, enabling/disabeling/reloading plugins etc)
-    # this stub will still be here. 
+    # this stub will still be here.
     #
 
     # if running on standalone mode, then all these respnses needs to be

@@ -1,5 +1,4 @@
 package Gutta::DBI;
-#use base 'Class::Singleton';
 
 use warnings;
 use strict;

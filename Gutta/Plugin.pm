@@ -4,6 +4,9 @@ use Storable;
 use strict;
 use warnings;
 use DateTime;
+use Log::Log4perl;
+
+my $log;
 
 sub new
 {
@@ -45,6 +48,9 @@ sub _initialise
     $self->{commands} = $self->_commands();
 
     $self->{datafile} = "Gutta/Data/" . __PACKAGE__ . ".data",
+
+    # The logger
+    $log = Log::Log4perl->get_logger(__PACKAGE__);
 }
 
 sub _get_triggers
@@ -118,7 +124,7 @@ sub heartbeat
 
     if (($nowt - $self->{heartbeat_act_ts}) >= $self->{heartbeat_act_s})
     {
-        warn "♥\n";
+        $log->debug("♥");
         $self->{heartbeat_act_ts} = $nowt;
         $self->_heartbeat_act;
     }

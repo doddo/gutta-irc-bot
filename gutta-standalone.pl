@@ -17,6 +17,7 @@ use threads::shared;
 
 chdir(dirname(__FILE__));
 use Gutta::AbstractionLayer;
+use Log::Log4perl;
 
 my $server;
 my $port = 6667;
@@ -24,6 +25,10 @@ my $own_nick;
 my @channels;
 my $workers2start = 4;
 my $login;
+
+Log::Log4perl->init("Gutta/Config/Log4perl.conf");
+my $log = Log::Log4perl->get_logger();
+
 
 GetOptions (
         "server=s" => \$server,
@@ -47,7 +52,7 @@ my $gal = Gutta::AbstractionLayer->new(parse_response => 1,
                                         workers2start => $workers2start);
 
 
-print "Connecting to server\n";
+$log->info("Connecting to server");
 
 
 my $sock = new IO::Socket::INET(PeerAddr => $server,
@@ -56,17 +61,17 @@ my $sock = new IO::Socket::INET(PeerAddr => $server,
                                ) or
                                     die "Can't connect: $!\n";
 
-print "*** Logging in to server\n";
+$log->info("Logging in to server");
 # Log on to the server.
-print " < NICK $own_nick\r\n";
+$log->info(" < NICK $own_nick");
 print $sock "NICK $own_nick\r\n";
-print " < USER $login 8 * :Gutta Standalone\r\n";
+$log->info(" < USER $login 8 * :Gutta Standalone");
 print $sock "USER $login 8 * :Gutta Standalone\r\n";
 
 # Read lines from the server until it tells us we have connected.
 while (my $message = <$sock>)
 {
-    printf " > %s", $message;
+    $log->info(sprintf " > %s", $message);
     # Check the numerical responses from the server.
     if ($message =~ /004/) {
         # We are now logged in.
@@ -78,12 +83,12 @@ while (my $message = <$sock>)
 }
 
 
-print "*** logged in !!\n";
+$log->info("*** logged in !!");
 
 # Start the plugin responses
 async(\&plugin_responses, $sock, $server)->detach;
 
-print "*** staring heartneat thread\n";
+$log->info("*** staring heartneat thread");
 $gal->start_heartbeat($server);
 
 print "*** Logged in to server, joining channels\n";
@@ -91,7 +96,7 @@ print "*** Logged in to server, joining channels\n";
 foreach my $channel (@channels)
 {
     print $sock "JOIN $channel\r\n";
-    print " < JOIN $channel\r\n";
+    $log->info(" < JOIN $channel");
 }
 
 # Keep reading lines from the server.
@@ -100,18 +105,18 @@ while (my $message = <$sock>)
     chop $message;
 
     # display what the server says.
-    print " > $message\n";
+    $log->info(" > $message\n");
 
     if ($message =~ /^PING(.*)$/i)
     {
         # We must respond to PINGs to avoid being disconnected.
-        print " < PONG $1\r\n";
+        $log->info(" < PONG $1");
         print $sock "PONG $1\r\n";
     } else {
         my @irc_cmds = $gal->process_msg($server,$message);
         foreach my $irc_cmd (@irc_cmds)
         {
-            printf " < %s", $irc_cmd;
+            $log->info(sprintf " < %s", $irc_cmd);
             printf $sock "%s", $irc_cmd;
         }
     }
