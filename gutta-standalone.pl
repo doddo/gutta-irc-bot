@@ -40,7 +40,7 @@ GetOptions (
 
 
 #
-#  MAIN
+# "MAIN"
 #
 #
 
@@ -48,9 +48,7 @@ $login||=$own_nick;
 
 
 my $gal = Gutta::AbstractionLayer->new(parse_response => 1,
-                                             own_nick => $own_nick,
-                                        workers2start => $workers2start);
-
+                                             own_nick => $own_nick);
 
 $log->info("Connecting to server");
 
@@ -89,7 +87,10 @@ $log->info("*** logged in !!");
 async(\&plugin_responses, $sock, $server)->detach;
 
 $log->info("*** staring heartneat thread");
-$gal->start_heartbeat($server);
+# Start the heart of Gutta.
+async(\&heartbeat, $server)->detach;
+
+
 
 print "*** Logged in to server, joining channels\n";
 # Join the channels.
@@ -107,7 +108,7 @@ while (my $message = <$sock>)
     # display what the server says.
     $log->info(" > $message\n");
 
-    if ($message =~ /^PING(.*)$/i)
+    if ($message =~ /^PING (.*)$/i)
     {
         # We must respond to PINGs to avoid being disconnected.
         $log->info(" < PONG $1");
@@ -130,16 +131,35 @@ sub plugin_responses
     #
     my $sock = shift;
     my $server = shift;
-    print "*** starting plugin_responses thread\n";
+    $log->debug("*** starting plugin_responses thread");
     while (sleep(2))
     {
         eval {
             my @irc_cmds = $gal->plugin_res(4);
             foreach my $irc_cmd (@irc_cmds)
             {
-                printf " < %s", $irc_cmd;
+                $log->info(sprintf" < %s", $irc_cmd);
                 print $sock $irc_cmd;
             }
+        };
+        warn $@ if $@; #TODO fix.
+    }
+}
+
+sub heartbeat
+{
+    # this is calling the gal:s heartbeat which then passes along
+    # heartbeats to the appropriate plugin thread.
+    #
+    my $server = shift;
+    $log->debug("*** starting heartbeat thread.");
+
+    # first initialise the queues.
+    $gal->init_heartbeat_queues($server);
+    while (sleep(2))
+    {
+        eval {
+            $gal->heartbeat();
         };
         warn $@ if $@; #TODO fix.
     }

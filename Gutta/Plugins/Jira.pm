@@ -99,6 +99,8 @@ sub _initialise
 {
     my $self = shift;
     $self->{datafile} = "Gutta/Data/" . __PACKAGE__ . ".data",
+    # this plugin NEEDS a thread of its own.
+    $self->{want_own_thread} = 1;
     $self->_dbinit(); #setup jira database tables
     $self->load(); # load the jira file
 }
