@@ -10,11 +10,13 @@ Gutta::Parser
 
 =head1 SYNOPSIS
 
-Parse and format messages to and from IRC server and Gutta::Plugins.
+Parse and format messages to and from IRC server and Gutta::Plugins through Gutta::AbstractionLayer..
 
 =head1 DESCRIPTION
 
-The Gutta::Parser parses incoming messages from the irc server, and speaks with the dispatcher who fires up the plugins, and the response from the Dispatcher passes the Parser too, and gets translated to a format suitable for the irc server
+Messages from the IRC server gets parsed using the  Gutta::Parser, so that Gutta::AbstractionLayer knows what to to with them,
+
+In addition to that, once a MSG have been recieved from the Plugins, the Gutta::Parser translate them to a format which makes sense to the IRC server.
 
 =cut
 
@@ -28,23 +30,6 @@ sub new
     return $self;
 }
 
-sub set_cmdprefix
-{
-    # The cmdprefix is the prefix for the commands.
-    # command "slap" gets prefixed by this.
-    my $self = shift;
-    my $cmdprefix = shift;
-    $self->{cmdprefix} = $cmdprefix;
-}
-
-sub get_cmdprefix
-{
-    # The cmdprefix is the prefix for the commands.
-    # this function returns the cmdprefix.
-    my $self = shift;
-    return $self->{cmdprefix};
-}
-
 sub parse
 {
     # Parse incoming $message, return
@@ -55,12 +40,8 @@ sub parse
     if ($message =~ m/^:[^:]+ PRIVMSG/)
     {
         return 'PRIVMSG', $self->parse_privmsg($message);
-
     }
-    
-
 }
-
 
 sub parse_response
 {
@@ -114,5 +95,85 @@ sub parse_privmsg
 
     return $+{msg}, $+{nick}, $+{mask}, $+{target};
 }
+
+sub parse_353_nicks
+{
+
+    my $self = shift;
+    $_ = shift;
+
+    # RFC2812 https://tools.ietf.org/html/rfc2812
+    #       353    RPL_NAMREPLY
+    #              "( "=" / "*" / "@" ) <channel>
+    #               :[ "@" / "+" ] <nick> *( " " [ "@" / "+" ] <nick> )
+    #         - "@" is used for secret channels, "*" for private
+    #           channels, and "=" for others (public channels).
+
+    m/^:(?<server>[^\s]++)\s  # get the server
+                       353\s  # 353 is the nicks
+      (?<own_nick>[^\s]++)\s  # own_nick
+     (?<channel>\#[^\s]++)\s  # channel
+        (?<chantype>[=*@])\s: # What type of channel is this?
+                (?<nicks>.+)$ # the nicks /x;
+
+    return $+{server}, $+{channel}, $+{chantype}, split(' ', $+{nicks});
+}
+
+sub parse_366_end_of_names
+{
+    my $self = shift;
+    $_ = shift;
+    # Parse messages looking like this:
+    # They tell that there are no more names/nicks joined to that chan,
+    # so that the nicks returned from the 353:s are all there is in there.
+    # :verne.freenode.net 366 gutta ##linux :End of /NAMES list.
+    m/^:(?<server>[^\s]++)\s  # get the server
+                       366\s  # "End of NAMES list."
+      (?<own_nick>[^\s]++)\s  # own_nick
+     (?<channel>\#[^\s]++)\s  # channel (don't care about restof msg) /x;
+
+    return $+{server}, $+{channel};
+}
+
+sub parse_userquit
+{
+    my $self = shift;
+    $_ = shift;
+    # :felco!~felco@unaffiliated/felco QUIT :Read error: Connection reset by peer
+    m/^:(?<nick>[^!]++)!  # get the nick
+         (?<mask>\S++)\s  # get the hostmask
+                  QUIT\s: # this is how we know hser did QUIT
+              (?<msg>.+)$ # rest of line would be the QUITMSG /x;
+
+    return $+{msg}, $+{nick}, $+{mask};
+
+}
+
+sub parse_joined_channel
+{
+    my $self = shift;
+    $_ = shift;
+    #:felco!~felco@unaffiliated/felco JOIN ##linux
+      m/^:(?<nick>[^!]++)!  # get the nick
+           (?<mask>\S++)\s  # get the hostmask
+                    JOIN\s  # this is how we know hser did JOIN
+   (?<channel>\#[^\s]++)\s  # channel /x;
+
+    return $+{nick}, $+{mask}, $+{channel};
+}
+
+sub parse_470_forwarded_to_other_channel
+{
+    my $self = shift;
+    
+    # Looks like this:
+    # :barjavel.freenode.net 470 gutta #linux ##linux :Forwarding to another channel
+    # :gutta!~gutta@c80-216-80-238.bredband.comhem.se JOIN ##linux
+    #
+    #
+
+
+}
+
 
 1;
