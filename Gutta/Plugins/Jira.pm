@@ -29,7 +29,7 @@ Provides Jira connection to gutta bot
 
 Can do a multitude of things.
 
-1. you need to set login credentials (if required) 
+1. you need to set login credentials (if required)
 
 This is done by chatting with the bot in a channel
 
@@ -75,8 +75,9 @@ sub process_msg
     } elsif ($rest_of_msg =~ /^feed/){
         return "msg ${target} " . $self->__setup_jira_feed(split(/\s+/,$rest_of_msg));
     } elsif ($rest_of_msg =~ /^Dump/i ) {
-        # TODO: fix this 
+        # TODO: fix this
         warn Dumper($self->{data});
+        return "msg $target $nick: dumped config to log for now...\n";
     } elsif ($rest_of_msg =~ /^i(?:'m| ?am)\s+(\S+)\b/i ) {
         $self->set_jira_user($nick, $1);
         my $jira_user_name = $self->get_jira_user($nick);
