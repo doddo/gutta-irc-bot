@@ -28,7 +28,15 @@ Provides Nagios connection to gutta bot
 
 =head1 DESCRIPTION
 
+Add support to have gutta check the nagios rest api for hostgroup status and send any alarms encounterd into the target channel or channels.
+
 say this:
+
+ '!monitor config --username monitor --password monitor --nagios-server 192.168.60.182'
+
+to configure a connection to monitor at 192.168.60.182 using username monitor and password monitor.
+
+Then start using it:
 
 !monitor hostgroup unix-servers --irc-server .* --to-channel #test123123
 
@@ -56,7 +64,12 @@ sub _initialise
     my $self = shift;
     # The logger
     $log = Log::Log4perl->get_logger(__PACKAGE__);
+
+    # initialise the database if need be.
     $self->_dbinit();
+
+    # this one should start in its own thread.
+    $self->{want_own_thread} = 1;
 }
 
 sub _commands
@@ -127,14 +140,15 @@ sub monitor
     # get the commands.
     my ($subcmd, @values) = split(/\s+/, $rest_of_msg);
 
-    switch ($subcmd)
+    switch (lc($subcmd))
     {
         case 'hostgroup' { @irc_cmds = $self->_monitor_hostgroup(@values) }
         case      'host' { @irc_cmds = $self->_monitor_host(@values) }
-        case      'user' { @irc_cmds = $self->_monitor_host(@values) }
+        case    'config' { @irc_cmds = $self->_monitor_config(@values) }
+        case      'dump' { @irc_cmds = $self->_monitor_login(@values) }
     }
 
-    return @irc_cmds;
+    return map { sprintf 'msg %s %s: %s', $target, $nick, $_ } @irc_cmds;
 }
 
 sub _monitor_hostgroup
@@ -156,6 +170,29 @@ sub _monitor_hostgroup
     return;
 }
 
+sub _monitor_config
+{
+    # Configure monitor, for example what nagios server is it?
+    # who is the user and what is the password etc etc
+    my $self = shift;
+    my @args = @_;
+    my %config;
+
+    my $ret = GetOptionsFromArray(\@args, \%config,
+           'username=s',
+           'password=s',
+     'check-interval=s',
+      'nagios-server=s',
+    ) or return "invalid options supplied:";
+    
+    while(my ($key, $value) = each %config)
+    {
+        $log->info("setting $key to $value for " . __PACKAGE__ . ".");
+        $self->set_config($key, $value);
+    }
+
+    return 'got it.'
+}
 
 sub unmonitor
 {
