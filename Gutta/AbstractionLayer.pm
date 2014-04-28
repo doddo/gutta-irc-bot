@@ -152,7 +152,7 @@ sub _load_triggers
         next unless $plugin->can('_triggers');
         if (my $t = $plugin->_triggers())
         {
-            $log->info(sprintf "loaded %i triggers for %s\n", scalar keys %{$t}, $plugin_key);
+            $log->debug(sprintf "loaded %i triggers for %s\n", scalar keys %{$t}, $plugin_key);
             $triggers{$plugin_key} = $t
         } else {
             $log->debug(sprintf "loaded 0 triggers for %s\n", $plugin_key);
@@ -177,7 +177,7 @@ sub _load_commands
         next unless $plugin->can('_commands');
         if (my $t = $plugin->_commands())
         {
-            $log->info(sprintf "loaded %i commands for %s", scalar keys %{$t}, $plugin_key);
+            $log->debug(sprintf "loaded %i commands for %s", scalar keys %{$t}, $plugin_key);
             $commands{$plugin_key} = $t;
         } else {
             $log->debug(sprintf "loaded 0 commands for %s", $plugin_key);
@@ -424,7 +424,7 @@ sub process_privmsg
             if (exists $$commands{$command})
             {
 
-                warn "BINGO FOR $plugin_ref @ $command\n";
+                $log->debug("BINGO FOR $plugin_ref @ $command");
                 # the msg with commandprefix stripped from it.
                 my $rest_of_msg = join ' ', @rest_of_msg;
 
