@@ -14,8 +14,14 @@
 use strict;
 use warnings;
 
+use Log::Log4perl;
+
 use File::Basename;
 chdir(dirname(__FILE__));
+
+
+Log::Log4perl->init("Gutta/Config/Log4perl.conf");
+my $log = Log::Log4perl->get_logger();
 
 use Data::Dumper;
 use Gutta::AbstractionLayer;
@@ -31,7 +37,7 @@ my $target = "#test123123";
 my $d = Gutta::AbstractionLayer->new();
 
 
-my @r = $d->process_msg (
+my @r = $d->process_privmsg (
     $server,
     $msg,
     $nick,
@@ -39,4 +45,8 @@ my @r = $d->process_msg (
     $target,
 );
 
-print Dumper(@r);
+
+sleep(2);
+
+my @irc_cmds = $d->plugin_res(999);
+$log->info(sprintf" < %s", $_) foreach @irc_cmds;
