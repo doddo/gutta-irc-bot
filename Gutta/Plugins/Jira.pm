@@ -131,7 +131,6 @@ sub _commands
 sub _setup_shema
 {
     my $self = shift;
-    my $what2setup = shift;
 
     my @queries  = (qq{
     CREATE TABLE IF NOT EXISTS jira_feeds (
