@@ -32,10 +32,7 @@ my $nick = "nickysthlm";
 my $mask = "*";
 my $target = "#test123123";
 
-
-
 my $d = Gutta::AbstractionLayer->new();
-
 
 my @r = $d->process_privmsg (
     $server,
