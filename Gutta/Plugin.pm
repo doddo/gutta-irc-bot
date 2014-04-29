@@ -22,7 +22,7 @@ sub new
 
     $self->__setup_config_shema();
     $self->_initialise();
-    warn "creating new class\n";
+
     return $self;
 }
 
