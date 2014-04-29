@@ -256,6 +256,9 @@ sub _get_hostgroups
 
     my $db_servicestatus = $self->_db_get_servicestatus();
 
+
+    $log->warn(Dumper($db_servicestatus));
+
     # now remove the hostgroups from the monitor_hosts_from_hostgroup, it will need new hosts now.
     my $sth2 = $dbh->prepare('DELETE FROM monitor_hosts_from_hostgroup');
     $sth2->execute();
@@ -302,6 +305,7 @@ sub _get_hostgroups
                 # And insert the state of the host here.
                 $sth3->execute($hostname, $state);
 
+                # GET servicestatus from the monitor API
                 %{$api_servicestatus{$hostname}} = $self->_api_get_host($hostname);
             }
         }
@@ -333,16 +337,16 @@ sub _get_hostgroups
         {
             $log->debug("processing $service for $hostname");
             # check if the service is defined in the database or not.
-            unless ($$db_hoststatus{$hostname}{$service})
+            unless ($$db_servicestatus{$hostname}{$service})
             {
                 # TODO: handle the new service def for new host here.
-                $log->debug(sprintf 'no previous service %s for host %s from the database', $service, $hostname);
+                $log->debug(sprintf 'no previous service %s for host %s from the database:%s', $service, $hostname, Dumper(%{$$db_servicestatus{$hostname}{$service}}));
                 next;
             }
 
             # get the service state from API and database
             my $api_servicestate = $api_servicestatus{$hostname}{$service}{'state'};
-            my $db_servicestate =  $$db_hoststatus{$hostname}{$service}{'state'};
+            my $db_servicestate =  $$db_servicestatus{$hostname}{$service}{'state'};
 
 
             if ($api_servicestate =! $db_servicestate)
@@ -452,7 +456,7 @@ sub _db_get_hosts
     my $self = shift;
     my $dbh = $self->dbh();
 
-    my $sth = $dbh->prepare('SELECT state, host_name, has_been_checked FROM monitor_servicedetail');
+    my $sth = $dbh->prepare('SELECT state, host_name FROM monitor_hoststatus');
 
     $sth->execute();
 
@@ -469,12 +473,12 @@ sub _db_get_servicestatus
     my $self = shift;
     my $dbh = $self->dbh();
     # TODO: Fix this tomorrow.
-    my $sth = $dbh->prepare('SELECT state, host_name, has_been_checked FROM monitor_servicedetail');
+    my $sth = $dbh->prepare('SELECT state, host_name, has_been_checked, service FROM monitor_servicedetail');
 
     $sth->execute();
 
 
-    my $hosts = $sth->fetchall_hashref('host_name');
+    my $hosts = $sth->fetchall_hashref([ qw/host_name service/ ]);
 
     $log->debug(Dumper($hosts));
 
@@ -544,12 +548,13 @@ sub __insert_new_hoststatus
                 last;
             }
         }
-        unless ($dbh->commit)
-        {
-            $log->warn(sprintf 'unable to save new monitor servicedetail:"%s"', $dbh->errstr());
-            $dbh->rollback;
-        }
     }
+    unless ($dbh->commit)
+    {
+        $log->warn(sprintf 'unable to save new monitor servicedetail:"%s"', $dbh->errstr());
+        $dbh->rollback;
+    }
+
 }
 
 
