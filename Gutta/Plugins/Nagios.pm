@@ -246,17 +246,30 @@ sub _get_hostgroups
     # the hoststatus which've been fetched from the db
     my $db_hoststatus = $self->_db_get_hosts();
 
+    # the servicestatus which've been fetched from the db.
+    #
+
+    #  After having gotten db_hoststatus and db_servicedetail, and read it into vars, now we replace
+    #  the stuff in the database with what is found in the API. We'll compare them later.
+    #
+    #  This means that if crash here, then the data will have to be downloaded atain, but that's OK
+
+    my $db_servicestatus = $self->_db_get_servicestatus();
+
     # now remove the hostgroups from the monitor_hosts_from_hostgroup, it will need new hosts now.
     my $sth2 = $dbh->prepare('DELETE FROM monitor_hosts_from_hostgroup');
-    $sth2->execute();    
+    $sth2->execute();
 
     # prepare a new statement to re-populate that hostgroup...
-    $sth2 = $dbh->prepare('INSERT INTO monitor_hosts_from_hostgroup (host_name, hostgroup) VALUES (?,?)');
+    $sth2 = $dbh->prepare('INSERT OR IGNORE INTO monitor_hosts_from_hostgroup (host_name, hostgroup) VALUES (?,?)');
 
     # Prepare to add a new host into monitor_hoststatus
-    my $sth3 = $dbh->prepare('INSERT INTO monitor_hoststatus (host_name, state) VALUES(?,?)');
+    my $sth3 = $dbh->prepare('INSERT OR REPLACE INTO monitor_hoststatus (host_name, state) VALUES(?,?)');
 
-    # the same host status we just are about to get from the API.
+    # the same service status we just are about to get from the API.
+    my %api_servicestatus;
+
+    # Status of the host (We get them from the hostgroup)
     my %api_hoststatus;
 
     # Loop through all the configured hostgroups, and fetch node status for them.
@@ -276,50 +289,71 @@ sub _get_hostgroups
             foreach my $member (@$members)
             {
                 my ($hostname, $state, $has_been_checked) = @$member;
+
+                # create the hoststatus hash to look the same as what we got from the db earlier (hopefully)
+                %{$api_hoststatus{$hostname}} = (
+                               state => $state,
+                    has_been_checked => $has_been_checked
+                );
+
                 $log->debug(sprintf 'got %s with state %i. been checked=%i', $hostname, $state, $has_been_checked);
+                # Add to monitor_hosts_from_hostgroup (so we know what hostgroups this host belong to
                 $sth2->execute($hostname, $hostgroup);
+                # And insert the state of the host here.
                 $sth3->execute($hostname, $state);
-                %{$api_hoststatus{$hostname}} = $self->_api_get_host($hostname);
+
+                %{$api_servicestatus{$hostname}} = $self->_api_get_host($hostname);
             }
         }
     }
-    
+
+
     # Insert the host status stuff into the database...
-    $self->__insert_or_replace_new_hostatus(\%api_hoststatus);
+    $self->__insert_new_hoststatus(\%api_servicestatus);
 
 
     # OK so lets compare few things.
-    foreach my $hostname (keys %api_hoststatus)
+    foreach my $hostname (keys %api_servicestatus)
     {
         $log->debug("processing $hostname ...");
         # check if new host exists in the database or not.
+        $log->debug(Dumper($$db_hoststatus{$hostname}));
         unless ($$db_hoststatus{$hostname})
         {
             # TODO: handle the new host here.
+            $log->debug(sprintf 'no known status for %s from the database', $hostname);
             next;
+        } elsif ($$db_hoststatus{$hostname}{'state'} != $api_hoststatus{$hostname}{'state'}){
+            # TODO: Here we can send a a MSG though GUTTA.
+            #   BUT : there will have to be some considerations so that gutta wont send
+            #   10000 messages if monitoring 100000 hosts.
+            #
         }
-        foreach my $service (keys %{$api_hoststatus{$hostname}})
+        foreach my $service (keys %{$api_servicestatus{$hostname}})
         {
             $log->debug("processing $service for $hostname");
             # check if the service is defined in the database or not.
             unless ($$db_hoststatus{$hostname}{$service})
             {
                 # TODO: handle the new service def for new host here.
+                $log->debug(sprintf 'no previous service %s for host %s from the database', $service, $hostname);
                 next;
             }
-        
+
             # get the service state from API and database
-            my $api_servicestate = $api_hoststatus{$hostname}{$service}{'state'};
+            my $api_servicestate = $api_servicestatus{$hostname}{$service}{'state'};
             my $db_servicestate =  $$db_hoststatus{$hostname}{$service}{'state'};
-     
+
 
             if ($api_servicestate =! $db_servicestate)
             {
                 # Here we got a diff between what nagios says and last "known" status (ie what it said last time
                 # we checked, that's why this is an event we can send an alarm to or some such)
                 #
-                $log->debug(sprintf 'service "%s" for host "%s" have status from api %i and from db %i', $service, $hostname, $api_servicestate, $db_servicestate);
+                $log->debug(sprintf 'service "%s" for host "%s" have changed status from %i to %i.', $service, $hostname, $db_servicestate, $api_servicestate);
 
+            } else {
+                $log->debug(sprintf 'service "%s" for host "%s" remain %i.', $service, $hostname, $db_servicestate);
             }
         }
 
@@ -335,12 +369,12 @@ sub _get_hostgroups
           WHERE NOT host_name IN (SELECT DISTINCT host FROM monitor_hosts)});
 
 
-     SELECT monitor_hosts_from_hostgroup.hostgroup, 
+     SELECT monitor_hosts_from_hostgroup.hostgroup,
                    monitor_servicedetail.host_name,
                    monitor_servicedetail.service,
-                   monitor_servicedetail.state        
-             FROM  monitor_servicedetail 
-        INNER JOIN monitor_hosts_from_hostgroup 
+                   monitor_servicedetail.state
+             FROM  monitor_servicedetail
+        INNER JOIN monitor_hosts_from_hostgroup
       ON monitor_hosts_from_hostgroup.host_name = monitor_servicedetail.host_name;
 
 
@@ -353,12 +387,12 @@ sub _get_hostgroups
                   service,
                     state,
          has_been_checked) VALUES (?,?,?,?)
-     });    
+     });
 
     # to update host status.
     $sth2 = $dbh->prepare('UPDATE  monitor_hoststatus SET state = ? where host_name = ?');
 
-    #foreach my $hostname (keys %api_hoststatus)
+    #foreach my $hostname (keys %api_servicestatus)
 
 
 
@@ -368,7 +402,7 @@ sub _get_hostgroups
     #    INSERT INTO monitor_servicedetail host_name, service, state, has_been_checked
     #            VALUES (?,?,?,?)});
 
-    
+
 
 
     return;
@@ -407,7 +441,7 @@ sub _api_get_host
         );
         $log->debug(sprintf 'from nagios: service for "%s": "%s" with state %i: "%s"', $host, $servicename, $state, $msg);
     }
-    
+
 
     return %host_services;
 }
@@ -426,10 +460,26 @@ sub _db_get_hosts
     my $hosts = $sth->fetchall_hashref('host_name');
 
     $log->debug(Dumper($hosts));
-    
+
     return $hosts;
 }
 
+sub _db_get_servicestatus
+{
+    my $self = shift;
+    my $dbh = $self->dbh();
+    # TODO: Fix this tomorrow.
+    my $sth = $dbh->prepare('SELECT state, host_name, has_been_checked FROM monitor_servicedetail');
+
+    $sth->execute();
+
+
+    my $hosts = $sth->fetchall_hashref('host_name');
+
+    $log->debug(Dumper($hosts));
+
+    return $hosts;
+}
 
 sub __get_request
 {
@@ -465,13 +515,21 @@ sub __get_request
     }
 }
 
-sub __insert_or_replace_new_hostatus
+sub __insert_new_hoststatus
 {
     my $self = shift;
     my $hoststatus = shift;
     my $dbh = $self->dbh();
 
-    my $sth  = $dbh->prepare(qq{INSERT OR REPLACE INTO monitor_servicedetail
+
+    my $rc  = $dbh->begin_work;
+    
+    # cleaning in the database
+    my $sth = $dbh->prepare(qq{DELETE FROM monitor_servicedetail});
+    $sth->execute();
+
+    # prepairng to insert new stuff.
+    $sth  = $dbh->prepare(qq{INSERT OR IGNORE INTO monitor_servicedetail
                             (host_name, service, state, has_been_checked) VALUES(?,?,?,?)});
 
     while (my ($hostname, $services) = each (%{$hoststatus}))
@@ -479,10 +537,19 @@ sub __insert_or_replace_new_hostatus
         while (my ($service, $sd) = each (%{$services}))
         {
             $log->debug("I NOW AM DOING THIS for $hostname - $service `$$sd{msg}`");
-            $sth->execute($$sd{'host_name'}, $service, $$sd{'state'}, $$sd{'has_been_checked'}) or $log->warn($dbh->errstr());
+            unless($sth->execute($$sd{'host_name'}, $service, $$sd{'state'}, $$sd{'has_been_checked'}))
+            {
+                $log->warn(sprintf 'Updating monitor_servicedetail failed with msg:"%s". Rolling back.', $dbh->errstr());
+                $dbh->rollback;
+                last;
+            }
+        }
+        unless ($dbh->commit)
+        {
+            $log->warn(sprintf 'unable to save new monitor servicedetail:"%s"', $dbh->errstr());
+            $dbh->rollback;
         }
     }
-
 }
 
 
