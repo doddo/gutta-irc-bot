@@ -321,7 +321,6 @@ sub _get_hostgroups
     {
         $log->debug("processing $hostname ...");
         # check if new host exists in the database or not.
-        $log->debug(Dumper($$db_hoststatus{$hostname}));
         unless ($$db_hoststatus{$hostname})
         {
             # TODO: handle the new host here.
@@ -335,7 +334,7 @@ sub _get_hostgroups
         }
         foreach my $service (keys %{$api_servicestatus{$hostname}})
         {
-            $log->debug("processing $service for $hostname");
+            $log->trace("processing $service for $hostname");
             # check if the service is defined in the database or not.
             unless ($$db_servicestatus{$hostname}{$service})
             {
@@ -345,19 +344,19 @@ sub _get_hostgroups
             }
 
             # get the service state from API and database
-            my $api_servicestate = $api_servicestatus{$hostname}{$service}{'state'};
-            my $db_servicestate =  $$db_servicestatus{$hostname}{$service}{'state'};
+            my $api_sstate = $api_servicestatus{$hostname}{$service}{'state'};
+            my $db_sstate =  $$db_servicestatus{$hostname}{$service}{'state'};
+                                   
 
-
-            if ($api_servicestate =! $db_servicestate)
+            if ($api_sstate != $db_sstate)
             {
                 # Here we got a diff between what nagios says and last "known" status (ie what it said last time
                 # we checked, that's why this is an event we can send an alarm to or some such)
                 #
-                $log->debug(sprintf 'service "%s" for host "%s" have changed status from %i to %i.', $service, $hostname, $db_servicestate, $api_servicestate);
+                $log->debug(sprintf 'service "%s" for host "%s" have changed state from %s to %s.:%s', $service, $hostname, $db_sstate, $api_sstate, $api_servicestatus{$hostname}{$service}{'msg'});
 
             } else {
-                $log->debug(sprintf 'service "%s" for host "%s" remain %i.', $service, $hostname, $db_servicestate);
+                $log->debug(sprintf 'service "%s" for host "%s" remain %i.', $service, $hostname, $db_sstate);
             }
         }
 
