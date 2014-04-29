@@ -42,8 +42,12 @@ my @r = $d->process_privmsg (
     $target,
 );
 
+for (my $i=0;$i<5;$i++)
+{
+    foreach ($d->plugin_res(999))
+    {
+        $log->info(sprintf" < %s", $_);
+    }
+    sleep 1;
+}
 
-sleep(2);
-
-my @irc_cmds = $d->plugin_res(999);
-$log->info(sprintf" < %s", $_) foreach @irc_cmds;
