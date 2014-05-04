@@ -168,7 +168,7 @@ sub monitor
         case      'host' { @irc_cmds = $self->_monitor_host(@values) }
         case    'config' { @irc_cmds = $self->_monitor_config(@values) }
         case      'dump' { @irc_cmds = $self->_monitor_login(@values) }
-        case   'runonce' { @irc_cmds = $self->_monitor_runonce(@values) }
+        case   'runonce' { @irc_cmds = ($self->_monitor_runonce(@values), $self->heartbeat_res("exampleserver")) }
     }
 
     return map { sprintf 'msg %s %s: %s', $target, $nick, $_ } @irc_cmds;
@@ -305,7 +305,7 @@ sub _monitor_runonce
             my $timestamp = time;
 
             my $members = @$payload{'members_with_state'};
-            
+
             foreach my $member (@$members)
             {
                 my ($hostname, $state, $has_been_checked) = @$member;
@@ -321,7 +321,7 @@ sub _monitor_runonce
                        plugin_output => $plugin_output,
                 );
 
-              
+
                 $log->trace(Dumper(%{$api_hoststatus{$hostname}}));
 
                 # Add to monitor_hosts_from_hostgroup (so we know what hostgroups this host belong to
@@ -384,7 +384,7 @@ sub _monitor_runonce
                 #
                 my $api_sstate = $api_servicestatus{$hostname}{$service}{'state'};
                 my $db_sstate  = $$db_servicestatus{$hostname}{$service}{'state'};
-                                       
+
 
                 if ($api_sstate != $db_sstate)
                 {
@@ -518,7 +518,7 @@ sub _db_get_servicestatus
 {
     my $self = shift;
     my $dbh = $self->dbh();
-    # Here the last known statuses are fetched from the database !! 
+    # Here the last known statuses are fetched from the database !!
     my $sth = $dbh->prepare('SELECT state, host_name, has_been_checked, service FROM monitor_servicedetail');
 
     $sth->execute();
@@ -573,9 +573,9 @@ sub __insert_new_servicestatus
 
 
     my $rc  = $dbh->begin_work;
-    
+
     # timestamp
-    
+
     my $timestamp = time;
 
     # prepairng to insert new stuff.
@@ -664,48 +664,130 @@ sub heartbeat_res
     my $server = shift;
 
     my $dbh = $self->dbh();
+    my $sth;
 
-    my @payload;
+    # The responses to return from this sub.
+    # It's a flat list of IRC PRIVMSGS
+    my @responses;
 
-    $dbh->begin_work;
-    
     # timestamp
-    
-    my $timestamp = time;
+    my $timestamp = time; # TODO add timestamp to filter out "stale" alarms (it easy)
 
-    # WHO TO SEND WHAT TO = 
-    my $sth  = $dbh->prepare(qq{
-      SELECT DISTINCT irc_server, channel, host_name 
-        FROM  (SELECT irc_server, channel, host_name  
-                FROM monitor_hosts_from_hostgroup a 
+    # WHO TO SEND WHAT TO =
+    $sth  = $dbh->prepare(qq{
+      SELECT DISTINCT irc_server, channel, host_name
+        FROM  (SELECT irc_server, channel, host_name
+                FROM monitor_hosts_from_hostgroup a
           INNER JOIN monitor_hostgroups b
                   ON a.hostgroup = b.hostgroup)
     });
 
     $sth->execute();
-    my $servchan = $sth->fetchall_hashref([ qw/irc_server channel/ ]);
+    my $servchan = $sth->fetchall_hashref([ qw/irc_server channel host_name/ ]);
+
+    $sth = $dbh->prepare(qq{
+          SELECT a.host_name,
+                 b.plugin_output,
+                 b.state
+            FROM monitor_message_hosts a
+      INNER JOIN monitor_hoststatus b
+              ON a.host_name = b.host_name
+      INNER JOIN monitor_hosts_from_hostgroup c
+              on c.host_name = a.host_name
+    });
+
+    $sth->execute();
+    my $hoststatus = $sth->fetchall_hashref([qw/host_name/]);
+
 
     # All the new alarms for this run, which should be sent as appropriate.
     $sth = $dbh->prepare(qq{
-         SELECT a.host_name, 
-                b.service, 
-                b.plugin_output, 
-                b.state, 
-                c.hostgroup
-           FROM monitor_message_servicedetail a 
-     INNER JOIN monitor_servicedetail b 
-             ON a.host_name = b.host_name 
+         SELECT a.host_name,
+                b.service,
+                b.plugin_output,
+                b.state,
+                b.timestamp
+           FROM monitor_message_servicedetail a
+     INNER JOIN monitor_servicedetail b
+             ON a.host_name = b.host_name
             AND a.service = b.service
-     INNER JOIN monitor_hosts_from_hostgroup c 
+     INNER JOIN monitor_hosts_from_hostgroup c
              ON a.host_name = c.host_name
+          WHERE a.host_name
+         NOT IN ( SELECT host_name
+                    FROM monitor_hoststatus
+                   WHERE state != 0 )
     });
-    
+
+
+
     $sth->execute();
-    my $services = fetchall_rows();
+    my $services = $sth->fetchall_hashref([ qw/host_name service/ ] );
 
-    
+    $log->debug("  SERVCHAN:" . Dumper($servchan));
+    $log->debug("HOSTSTATUS:" . Dumper($hoststatus));
+    $log->debug("  SERVICES:" . Dumper($services));
 
+    while (my ($server_re, $chan) = each (%{$servchan}))
+    {
+        # step 1. is filtering out what server is coming and see what is relevant
+        if ($server =~ qr/$server_re/)
+        {
+            # server match found here. so continuing exploring.
+            $log->info("'$server' matches regex '$server_re': Proceeding.");
 
+            # extract all the channels to queue IRC messages responses here.
+            while (my ($channel, $hosts) = each (%{$chan}))
+            {
+                while (my ($host_name, $host_msg_cfg) = each (%{$hosts}))
+                {
+                    $log->debug("evaluating $$host_msg_cfg{'host_name'}");
+                    # First: a check here to see what's up with the HOSTS
+                    # TODO: a check here to see if joined to chan
+                    #(no supprort for that yet thoough)
+                    if ($$hoststatus{$$host_msg_cfg{'host_name'}})
+                    {
+                        # TODO: here can check if keys %{chan} > X to determine if something is *really* messed up
+                        # and write something about that, because there's a risk of flooding if sending too many PRIVMSGS.
+                        # and if 20+ hosts are down or uå, you can bundle the names and say THESE ARE DOWN (list of hosts)
+                        # and these hosts are UP (list of hosts)
+                       
+                        # First take relevant info here so as to not have to type so much.
+                        my $s = $$hoststatus{$$host_msg_cfg{'host_name'}};
+                        $log->debug("Will send a message about $$host_msg_cfg{'host_name'} to $channel, saying  this: " . Dumper($s));
+                        # Format a nicely formatted message here TODO: color support.
+                        push @responses, sprintf 'msg %s %s is %s: %s', $channel, $$s{'host_name'}, $$s{'state'} , $$s{'plugin_output'};
+                    } elsif ($$services{$$host_msg_cfg{'host_name'}}) {
+                        # TODO: here can check if keys %{chan} > X to determine if something is *really* messed up
+                        # and write something about that, because there's a risk of flooding if sending too many PRIVMSGS.
+                        # and if 20+ services are down, you can bundle the names and say THESE HOSTS ARE X (list of hosts)
+
+                        # First take relevant info here so as to not have to type so much.
+                        my $s = $$services{$$host_msg_cfg{'host_name'}};
+                        $log->debug("Will send a message about $$host_msg_cfg{'host_name'} to $channel, saying  this: " . Dumper($s));
+                        while (my ($service_name, $service_data) = each (%{$s}))
+                        {
+                            $log->debug("Will send a message about $$host_msg_cfg{'host_name'} service $service_name to $channel, saying  this: " . Dumper($service_data));
+                            push @responses, sprintf 'msg %s %s "%s" is %s: %s', $channel, $$s{'host_name'}, $service_name, $$service_data{'state'} , $$service_data{'plugin_output'};
+                        }
+                    }
+                }
+            }
+        } else {
+            $log->info("$server DOES NOT match regex $server_re: Skipping.");
+
+        }
+    }
+
+    #
+    # OK removing the junk from the db, I dont think this is thread safe
+    #
+    $sth = $dbh->prepare('DELETE FROM monitor_message_servicedetail');
+    $sth->execute;
+    $sth = $dbh->prepare('DELETE FROM monitor_message_hosts');
+    $sth->execute;
+
+    return @responses;
 }
 
 
