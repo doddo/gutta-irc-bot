@@ -117,7 +117,6 @@ sub _setup_shema
           timestamp INTEGER DEFAULT 0,
     FOREIGN KEY (host_name) REFERENCES monitor_hoststatus(host_name),
       CONSTRAINT uniq_service UNIQUE (host_name, service)
-
     )}, qq{
     CREATE TABLE IF NOT EXISTS monitor_hosts_from_hostgroup (
           host_name TEXT NOT NULL,
@@ -169,7 +168,7 @@ sub monitor
         case      'host' { @irc_cmds = $self->_monitor_host(@values) }
         case    'config' { @irc_cmds = $self->_monitor_config(@values) }
         case      'dump' { @irc_cmds = $self->_monitor_login(@values) }
-        case   'runonce' { @irc_cmds = $self->_get_hostgroups(@values) }
+        case   'runonce' { @irc_cmds = $self->_monitor_runonce(@values) }
     }
 
     return map { sprintf 'msg %s %s: %s', $target, $nick, $_ } @irc_cmds;
@@ -248,7 +247,7 @@ sub unmonitor
 }
 
 
-sub _get_hostgroups
+sub _monitor_runonce
 {
     my $self = shift;
 
@@ -527,7 +526,7 @@ sub _db_get_servicestatus
 
     my $hosts = $sth->fetchall_hashref([ qw/host_name service/ ]);
 
-    $log->debug(Dumper($hosts));
+    $log->trace(Dumper($hosts));
 
     return $hosts;
 }
@@ -636,7 +635,7 @@ sub __insert_services_to_msg
     my @hosts_to_msg = @_;
     my $dbh = $self->dbh();
 
-    my $sth = $dbh->prepare('INSERT OR REPLACE INTO monitor_message_servicedetail 
+    my $sth = $dbh->prepare('INSERT OR REPLACE INTO monitor_message_servicedetail
                                         (host_name, service, old_state) VALUES(?,?,?)');
 
     foreach my $what2add (@hosts_to_msg)
@@ -644,6 +643,69 @@ sub __insert_services_to_msg
         my ($host_name, $service, $old_state) = @{$what2add};
         $sth->execute($host_name, $service, $old_state);
     }
+}
+
+sub _heartbeat_act
+{
+    #  Gets called when the heartbeat is time to act.
+    #
+    #
+
+
+    my $self = shift;
+    $self->_monitor_runonce;
+}
+
+sub heartbeat_res
+{
+    # the response gets populated if anything new is found, and then it
+    # is sent to the server.
+    my $self = shift;
+    my $server = shift;
+
+    my $dbh = $self->dbh();
+
+    my @payload;
+
+    $dbh->begin_work;
+    
+    # timestamp
+    
+    my $timestamp = time;
+
+    # WHO TO SEND WHAT TO = 
+    my $sth  = $dbh->prepare(qq{
+      SELECT DISTINCT irc_server, channel, host_name 
+        FROM  (SELECT irc_server, channel, host_name  
+                FROM monitor_hosts_from_hostgroup a 
+          INNER JOIN monitor_hostgroups b
+                  ON a.hostgroup = b.hostgroup)
+    });
+
+    $sth->execute();
+    my $servchan = $sth->fetchall_hashref([ qw/irc_server channel/ ]);
+
+    # All the new alarms for this run, which should be sent as appropriate.
+    $sth = $dbh->prepare(qq{
+         SELECT a.host_name, 
+                b.service, 
+                b.plugin_output, 
+                b.state, 
+                c.hostgroup
+           FROM monitor_message_servicedetail a 
+     INNER JOIN monitor_servicedetail b 
+             ON a.host_name = b.host_name 
+            AND a.service = b.service
+     INNER JOIN monitor_hosts_from_hostgroup c 
+             ON a.host_name = c.host_name
+    });
+    
+    $sth->execute();
+    my $services = fetchall_rows();
+
+    
+
+
 }
 
 
