@@ -2,6 +2,7 @@ package Gutta::Plugins::Nagios;
 # does something with Nagios
 
 use parent Gutta::Plugin;
+use Gutta::Color;
 
 use HTML::Strip;
 use LWP::UserAgent;
@@ -70,6 +71,10 @@ sub _initialise
 
     # this one should start in its own thread.
     $self->{want_own_thread} = 1;
+
+    # How often to act? I think best if there are like 5-10 min inbetween
+    # Atleast.
+    $self->{heartbeat_act_s} = 406;   #  act on heartbeats ~ every 6.7 min.
 }
 
 sub _commands
@@ -347,9 +352,16 @@ sub _monitor_runonce
         # check if new host exists in the database or not.
         unless ($$db_hoststatus{$hostname})
         {
-            # TODO: handle the new host here.
+            # A host not known of before pops up. What do we do with it?
             $log->debug(sprintf 'no known status for %s from the database', $hostname);
-            next;
+
+            # Answer: First, we chek whazzup with the host, is it down? then lets message.
+            if ($api_hoststatus{$hostname}{'state'} != 0)  #TODO sometimes 1 is OK
+            {
+                # add it with previous status 3=DOWN/UNREACHABLE. 
+                #         (http://nagios.sourceforge.net/docs/3_0/pluginapi.html)
+                $self->__insert_hosts_to_msg([$hostname, 3 ]);
+            }
         } elsif ($$db_hoststatus{$hostname}{'state'} != $api_hoststatus{$hostname}{'state'}){
             # HOST STATUS CHANGE HERE.
             # This is important, because if a host is down, we dont want to send the alarms for that host.
@@ -369,10 +381,12 @@ sub _monitor_runonce
                 # check if the service is defined in the database or not.
                 unless ($$db_servicestatus{$hostname}{$service})
                 {
-                    # TODO: handle the new service def for new host here.
+                    # Handle the new service def for new host here.
                     if ($api_servicestatus{$hostname}{$service}{'state'} != 0)
                     {
-                        $self->__insert_services_to_msg([$hostname,$service,undef]);
+                        # add it with previous status 3=UNKNOWN
+                        #         (http://nagios.sourceforge.net/docs/3_0/pluginapi.html)
+                        $self->__insert_services_to_msg([$hostname,$service, 3]);
                     }
 
                     $log->debug(sprintf 'no previous service %s for host %s from the database:%s', $service, $hostname, Dumper(%{$$db_servicestatus{$hostname}{$service}}));
@@ -404,52 +418,6 @@ sub _monitor_runonce
             }
         }
     }
-
-
-    # OK lets update the database.
-    #
-    # First remove everyting (almost)!!
-=pod
-    $sth = $dbh->prepare(qq{
-        DELETE FROM monitor_servicedetail
-          WHERE NOT host_name IN (SELECT DISTINCT host FROM monitor_hosts)});
-
-
-     SELECT monitor_hosts_from_hostgroup.hostgroup,
-                   monitor_servicedetail.host_name,
-                   monitor_servicedetail.service,
-                   monitor_servicedetail.state
-             FROM  monitor_servicedetail
-        INNER JOIN monitor_hosts_from_hostgroup
-      ON monitor_hosts_from_hostgroup.host_name = monitor_servicedetail.host_name;
-
-
-
-    $sth->execute();
-=cut
-    $sth = $dbh->prepare(qq{
-        REPLACE INTO monitor_servicedetail (
-                host_name,
-                  service,
-                    state,
-         has_been_checked) VALUES (?,?,?,?)
-     });
-
-    # to update host status.
-    $sth2 = $dbh->prepare('UPDATE  monitor_hoststatus SET state = ? where host_name = ?');
-
-    #foreach my $hostname (keys %api_servicestatus)
-
-
-
-    # TODO: Fix tomorrow.
-
-    #$sth = $dbh->prepare(qq{
-    #    INSERT INTO monitor_servicedetail host_name, service, state, has_been_checked
-    #            VALUES (?,?,?,?)});
-
-
-
 
     return;
 }
@@ -658,6 +626,7 @@ sub _heartbeat_act
 
 sub heartbeat_res
 {
+    # heartbeat res gets called on regular basis ~2sek interval.
     # the response gets populated if anything new is found, and then it
     # is sent to the server.
     my $self = shift;
@@ -673,18 +642,8 @@ sub heartbeat_res
     # timestamp
     my $timestamp = time; # TODO add timestamp to filter out "stale" alarms (it easy)
 
-    # WHO TO SEND WHAT TO =
-    $sth  = $dbh->prepare(qq{
-      SELECT DISTINCT irc_server, channel, host_name
-        FROM  (SELECT irc_server, channel, host_name
-                FROM monitor_hosts_from_hostgroup a
-          INNER JOIN monitor_hostgroups b
-                  ON a.hostgroup = b.hostgroup)
-    });
-
-    $sth->execute();
-    my $servchan = $sth->fetchall_hashref([ qw/irc_server channel host_name/ ]);
-
+    # Here is the check for the HOST statuses, by querying the "monitor_message_host" 
+    # table to check if a new message's popped up.
     $sth = $dbh->prepare(qq{
           SELECT a.host_name,
                  b.plugin_output,
@@ -699,8 +658,8 @@ sub heartbeat_res
     $sth->execute();
     my $hoststatus = $sth->fetchall_hashref([qw/host_name/]);
 
-
-    # All the new alarms for this run, which should be sent as appropriate.
+    # Here is to check for the hosts SERVICE statuses, by querying the 
+    # "monitor_message_servicedetail" table to check if a new message's popped up.
     $sth = $dbh->prepare(qq{
          SELECT a.host_name,
                 b.service,
@@ -719,15 +678,36 @@ sub heartbeat_res
                    WHERE state != 0 )
     });
 
-
-
     $sth->execute();
     my $services = $sth->fetchall_hashref([ qw/host_name service/ ] );
 
-    $log->debug("  SERVCHAN:" . Dumper($servchan));
-    $log->debug("HOSTSTATUS:" . Dumper($hoststatus));
-    $log->debug("  SERVICES:" . Dumper($services));
+    # Return if no messages have been found. This is what will happen most of the
+    # time considering how often this table gets queried.
+    unless (%{ $services } or  %{ $hoststatus })
+    {
+        $log->trace('Nothing to report.');
+        return;
+    }
 
+    # Here's to check who to send what to  (what channels on which servers etc)
+    $sth  = $dbh->prepare(qq{
+      SELECT DISTINCT irc_server, channel, host_name
+        FROM  (SELECT irc_server, channel, host_name
+                FROM monitor_hosts_from_hostgroup a
+          INNER JOIN monitor_hostgroups b
+                  ON a.hostgroup = b.hostgroup)
+    });
+
+    $sth->execute();
+    my $servchan = $sth->fetchall_hashref([ qw/irc_server channel host_name/ ]);
+
+
+    # A little traceging for troubleshooting.
+    $log->trace("  SERVCHAN:" . Dumper($servchan));
+    $log->trace("HOSTSTATUS:" . Dumper($hoststatus));
+    $log->trace("  SERVICES:" . Dumper($services));
+
+    # List all the servers and chan config
     while (my ($server_re, $chan) = each (%{$servchan}))
     {
         # step 1. is filtering out what server is coming and see what is relevant
@@ -788,6 +768,55 @@ sub heartbeat_res
     $sth->execute;
 
     return @responses;
+}
+
+sub __translate_return_codes:
+{
+    # translates responsecodes from the integers returned from plugins:
+    #       http://nagios.sourceforge.net/docs/3_0/plugins.html
+    # to their textual representations.
+    #
+    # Also add some colors :) 
+    my $self = shift;
+    #  Plugin Return Code  Service State   Host State
+    #  0                   OK              UP
+    #  1                   WARNING         UP or DOWN/UNREACHABLE*
+    #  2                   CRITICAL        DOWN/UNREACHABLE
+    #  3                   UNKNOWN         DOWN/UNREACHABLE
+    #
+    # *  Note: If the use_aggressive_host_checking option is enabled, 
+    #    return codes of 1 will result in a host state of DOWN or UNREACHABLE. 
+    #    Otherwise return codes of 1 will result in a host state of UP.
+    
+    my $return_code = shift;
+    my $service_or_host = shift||'service';
+
+    my $what;
+    
+    my @colors = [ $Gutta::Color::Green, 
+                   $Gutta::Color::Orange, 
+                   $Gutta::Color::Red,
+                   $Gutta::Color::Red ];
+
+    my @host_states = [ 'UP', 
+                        'UP or DOWN', # TODO FIX
+                        'DOWN',
+                        'DOWN',
+    my @service_states = qw/OK WARNING CRITICAL UNKNOWN/;
+
+
+    if ($service_or_host eq 'service')
+    {
+        $what = \@service_states;
+    } elsif ($service_or_host eq 'host') {
+        $what = \@host_states;
+    } else {
+        # HERE A PROGRAMMING ERROR IS FOUND
+        $log->warn("$service_or_host is neither 'service' nor 'host'")
+    }
+    
+    return $colors[$return_code] . $$what[$return_code]
+
 }
 
 
