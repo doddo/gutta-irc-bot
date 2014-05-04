@@ -358,7 +358,7 @@ sub _monitor_runonce
             # Answer: First, we chek whazzup with the host, is it down? then lets message.
             if ($api_hoststatus{$hostname}{'state'} != 0)  #TODO sometimes 1 is OK
             {
-                # add it with previous status 3=DOWN/UNREACHABLE. 
+                # add it with previous status 3=DOWN/UNREACHABLE.
                 #         (http://nagios.sourceforge.net/docs/3_0/pluginapi.html)
                 $self->__insert_hosts_to_msg([$hostname, 3 ]);
             }
@@ -642,7 +642,7 @@ sub heartbeat_res
     # timestamp
     my $timestamp = time; # TODO add timestamp to filter out "stale" alarms (it easy)
 
-    # Here is the check for the HOST statuses, by querying the "monitor_message_host" 
+    # Here is the check for the HOST statuses, by querying the "monitor_message_host"
     # table to check if a new message's popped up.
     $sth = $dbh->prepare(qq{
           SELECT a.host_name,
@@ -658,7 +658,7 @@ sub heartbeat_res
     $sth->execute();
     my $hoststatus = $sth->fetchall_hashref([qw/host_name/]);
 
-    # Here is to check for the hosts SERVICE statuses, by querying the 
+    # Here is to check for the hosts SERVICE statuses, by querying the
     # "monitor_message_servicedetail" table to check if a new message's popped up.
     $sth = $dbh->prepare(qq{
          SELECT a.host_name,
@@ -731,7 +731,7 @@ sub heartbeat_res
                         # and write something about that, because there's a risk of flooding if sending too many PRIVMSGS.
                         # and if 20+ hosts are down or uå, you can bundle the names and say THESE ARE DOWN (list of hosts)
                         # and these hosts are UP (list of hosts)
-                       
+
                         # First take relevant info here so as to not have to type so much.
                         my $s = $$hoststatus{$$host_msg_cfg{'host_name'}};
                         $log->debug("Will send a message about $$host_msg_cfg{'host_name'} to $channel, saying  this: " . Dumper($s));
@@ -748,7 +748,7 @@ sub heartbeat_res
                         while (my ($service_name, $service_data) = each (%{$s}))
                         {
                             $log->debug("Will send a message about $$host_msg_cfg{'host_name'} service $service_name to $channel, saying  this: " . Dumper($service_data));
-                            push @responses, sprintf 'msg %s %s "%s" is %s: %s', $channel, $$s{'host_name'}, $service_name, $$service_data{'state'} , $$service_data{'plugin_output'};
+                            push @responses, sprintf 'msg %s %s "%s" is %s: %s', $channel, $$host_msg_cfg{'host_name'}, $service_name, $$service_data{'state'} , $$service_data{'plugin_output'};
                         }
                     }
                 }
@@ -776,7 +776,7 @@ sub __translate_return_codes:
     #       http://nagios.sourceforge.net/docs/3_0/plugins.html
     # to their textual representations.
     #
-    # Also add some colors :) 
+    # Also add some colors :)
     my $self = shift;
     #  Plugin Return Code  Service State   Host State
     #  0                   OK              UP
@@ -784,21 +784,21 @@ sub __translate_return_codes:
     #  2                   CRITICAL        DOWN/UNREACHABLE
     #  3                   UNKNOWN         DOWN/UNREACHABLE
     #
-    # *  Note: If the use_aggressive_host_checking option is enabled, 
-    #    return codes of 1 will result in a host state of DOWN or UNREACHABLE. 
+    # *  Note: If the use_aggressive_host_checking option is enabled,
+    #    return codes of 1 will result in a host state of DOWN or UNREACHABLE.
     #    Otherwise return codes of 1 will result in a host state of UP.
-    
+
     my $return_code = shift;
     my $service_or_host = shift||'service';
 
     my $what;
-    
-    my @colors = [ $Gutta::Color::Green, 
-                   $Gutta::Color::Orange, 
+
+    my @colors = [ $Gutta::Color::Green,
+                   $Gutta::Color::Orange,
                    $Gutta::Color::Red,
                    $Gutta::Color::Red ];
 
-    my @host_states = [ 'UP', 
+    my @host_states = [ 'UP',
                         'UP or DOWN', # TODO FIX
                         'DOWN',
                         'DOWN',
@@ -814,7 +814,7 @@ sub __translate_return_codes:
         # HERE A PROGRAMMING ERROR IS FOUND
         $log->warn("$service_or_host is neither 'service' nor 'host'")
     }
-    
+
     return $colors[$return_code] . $$what[$return_code]
 
 }
