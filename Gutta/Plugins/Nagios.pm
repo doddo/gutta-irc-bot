@@ -45,13 +45,9 @@ To add op5 irc monitoring for all servers in the unix-servers hostgroups on all 
 
 Similarly
 
-!unmoniutor hostgroup unix-servers
+!unmonitor hostgroup unix-servers
 
 will remove monitoring for said server
-
-Also you can do this:
-
-!monitor host <hostid> --irc-server .* --to-channel #test123123
 
 to add a single host.
 
@@ -72,9 +68,15 @@ sub _initialise
     # this one should start in its own thread.
     $self->{want_own_thread} = 1;
 
+
+
     # How often to act? I think best if there are like 5-10 min inbetween
     # Atleast.
-    $self->{heartbeat_act_s} = 406;   #  act on heartbeats ~ every 6.7 min.
+    #
+    # Anyways, this is configurable, but will default to ~ 6.7 min.
+    #  you do it witn !monitor config --check-interval 500
+    #  (for 500 seconds)
+    $self->{heartbeat_act_s} = $self->get_config('check-interval')||406;   #  act on heartbeats ~ every 6.7 min.
 }
 
 sub _commands
@@ -169,11 +171,12 @@ sub monitor
 
     switch (lc($subcmd))
     {
-        case 'hostgroup' { @irc_cmds = $self->_monitor_hostgroup(@values) }
-        case      'host' { @irc_cmds = $self->_monitor_host(@values) }
-        case    'config' { @irc_cmds = $self->_monitor_config(@values) }
-        case      'dump' { @irc_cmds = $self->_monitor_login(@values) }
-        case   'runonce' { @irc_cmds = ($self->_monitor_runonce(@values), $self->heartbeat_res("exampleserver")) }
+        case       'hostgroup' { @irc_cmds = $self->_monitor_hostgroup(@values) }
+        case          'config' { @irc_cmds = $self->_monitor_config(@values) }
+        case            'dump' { @irc_cmds = $self->_monitor_login(@values) }
+        case         'runonce' { @irc_cmds = ($self->_monitor_runonce(@values), $self->heartbeat_res("exampleserver")) }
+        case      'hoststatus' { @irc_cmds = $self->_monitor_hoststatus(@values) }
+        case 'hostgroupstatus' { @irc_cmds = $self->_monitor_hostgroupstatus(@values)}
     }
 
     return map { sprintf 'msg %s %s: %s', $target, $nick, $_ } @irc_cmds;
@@ -229,6 +232,10 @@ sub _monitor_config
         $log->info("setting $key to $value for " . __PACKAGE__ . ".");
         $self->set_config($key, $value);
     }
+    
+   # ONE TIME DO THIS (special case for handling global config):
+   $self->{heartbeat_act_s} = $config{'check-interval'} if $config{'check-interval'};
+
 
     return 'got it.'
 }
@@ -243,14 +250,92 @@ sub unmonitor
     my $target = shift;
     my $rest_of_msg = shift;
 
+    # Return gets put into here after suffixing.
+    my @irc_cmds;
+
     # they need someonw to slap
-    return unless $rest_of_msg;
+    return "need more info. (Help not implemented yet)" unless $rest_of_msg;
 
-    #TODO FIX THIS BORING.
+    # Cmd can look like this: !unmonitor hostgroup unix-servers
+    # in which case rest of msg looks like this: hostgroup unix-server
+    
+    # get the commands.
+    my ($subcmd, @values) = split(/\s+/, $rest_of_msg);
 
-    return;
+    switch (lc($subcmd))
+    {
+        case 'hostgroup' { @irc_cmds = $self->_unmonitor_hostgroup(@values) }
+    }
+
+    return map { sprintf 'msg %s %s: %s', $target, $nick, $_ } @irc_cmds;
+
 }
 
+sub _unmonitor_hostgroup
+{
+    my $self = shift;
+    my $hostgroup = shift;
+    my @args = @_;
+
+    my $server;
+    my $channel;
+
+    my $ret = GetOptionsFromArray(\@args,
+        'irc-server=s' => \$server,
+        'to-channel=s' => \$channel,
+    ) or return "invalid options supplied.";
+
+    $log->debug("setting up hostgroup config for $channel on server(s) mathcing $server\n");
+
+    # get a db handle.
+    my $dbh = $self->dbh();
+
+    # Insert the stuff ino the database
+    my $sth = $dbh->prepare(qq{
+            DELETE FROM monitor_hostgroups
+                  WHERE hostgroup = ?
+                    AND irc_server = ?
+                    AND channel = ?}) or return $dbh->errstr;
+
+    # And DO it.
+    $sth->execute($hostgroup, $server, $channel) or return $dbh->errstr;
+
+    # the PRIVMSG to return.
+    return "OK - I think I just removed monitoring for hostgroup:[$hostgroup] on channel:[$channel] for servers matching re:[$server]";
+}
+
+sub _monitor_hoststatus
+{
+    my $self = shift;
+    # Here we handle the hoststatus of a given host.
+    # It gets downloaded, maybe update the db? TODO decide.
+    #
+    # Then return a list representation of that.
+    # THink some refactoring would be nice probably.
+    
+    # IT will return such info as:
+    #  * What is the status of the host itself?
+    #  * Which services are OK (aggregate unless some passed service)
+    #  * something like this.
+
+    return 'TODO';
+}
+
+sub _monitor_hostgroupstatus
+{
+    my $self = shift;
+    # Here we handle the hoststatus of a given host.
+    # It gets downloaded, maybe update the db? TODO decide.
+    #
+    # Then return a list representation of that.
+    # THink some refactoring would be nice probably.
+
+    # IT will return such info as:
+    #  * What is the status of the hosts included?
+    #  * What is the summary (ie services up/down, hosts up/down), stuff like that,
+
+    return 'TODO';
+}
 
 sub _monitor_runonce
 {
@@ -353,7 +438,7 @@ sub _monitor_runonce
         unless ($$db_hoststatus{$hostname})
         {
             # A host not known of before pops up. What do we do with it?
-            $log->debug(sprintf 'no known status for %s from the database', $hostname);
+            $log->info(sprintf 'New host?: No known status for %s from the database.', $hostname);
 
             # Answer: First, we chek whazzup with the host, is it down? then lets message.
             if ($api_hoststatus{$hostname}{'state'} != 0)  #TODO sometimes 1 is OK
@@ -389,7 +474,7 @@ sub _monitor_runonce
                         $self->__insert_services_to_msg([$hostname,$service, 3]);
                     }
 
-                    $log->debug(sprintf 'no previous service %s for host %s from the database:%s', $service, $hostname, Dumper(%{$$db_servicestatus{$hostname}{$service}}));
+                    $log->debug(sprintf 'no previous service %s for host %s from the database.', $service, $hostname);
                     next;
                 }
 
@@ -736,7 +821,7 @@ sub heartbeat_res
                         my $s = $$hoststatus{$$host_msg_cfg{'host_name'}};
                         $log->debug("Will send a message about $$host_msg_cfg{'host_name'} to $channel, saying  this: " . Dumper($s));
                         # Format a nicely formatted message here TODO: color support.
-                        push @responses, sprintf 'msg %s %s is %s: %s', $channel, $$s{'host_name'}, $$s{'state'} , $$s{'plugin_output'};
+                        push @responses, sprintf 'msg %s %s is %s: %s', $channel, $$s{'host_name'}, $self->__translate_return_codes($$s{'state'}) , $$s{'plugin_output'};
                     } elsif ($$services{$$host_msg_cfg{'host_name'}}) {
                         # TODO: here can check if keys %{chan} > X to determine if something is *really* messed up
                         # and write something about that, because there's a risk of flooding if sending too many PRIVMSGS.
@@ -748,7 +833,7 @@ sub heartbeat_res
                         while (my ($service_name, $service_data) = each (%{$s}))
                         {
                             $log->debug("Will send a message about $$host_msg_cfg{'host_name'} service $service_name to $channel, saying  this: " . Dumper($service_data));
-                            push @responses, sprintf 'msg %s %s "%s" is %s: %s', $channel, $$host_msg_cfg{'host_name'}, $service_name, $$service_data{'state'} , $$service_data{'plugin_output'};
+                            push @responses, sprintf 'msg %s %s "%s" is %s: %s', $channel, $$host_msg_cfg{'host_name'}, $service_name, $self->__translate_return_codes($$service_data{'state'}) , $$service_data{'plugin_output'};
                         }
                     }
                 }
@@ -793,15 +878,15 @@ sub __translate_return_codes:
 
     my $what;
 
-    my @colors = [ $Gutta::Color::Green,
+    my @colors = ( $Gutta::Color::Green,
                    $Gutta::Color::Orange,
-                   $Gutta::Color::Red,
-                   $Gutta::Color::Red ];
+                   $Gutta::Color::LightRed,
+                   $Gutta::Color::LightRed );
 
     my @host_states = [ 'UP',
                         'UP or DOWN', # TODO FIX
                         'DOWN',
-                        'DOWN',
+                        'DOWN'];
     my @service_states = qw/OK WARNING CRITICAL UNKNOWN/;
 
 
@@ -818,6 +903,5 @@ sub __translate_return_codes:
     return $colors[$return_code] . $$what[$return_code]
 
 }
-
 
 1;
