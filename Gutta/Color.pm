@@ -2,6 +2,8 @@ package Gutta::Color;
 
 # enables colored output.
 #
+$Reset = "";
+
 $White = "0";
 $Black = "1";
 $Blue = "2";
@@ -18,5 +20,6 @@ $LightBlue = "12";
 $Pink = "13";
 $Grey = "14";
 $LightGrey = "15";
+
 
 1;

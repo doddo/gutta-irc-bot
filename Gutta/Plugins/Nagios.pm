@@ -175,8 +175,6 @@ sub monitor
         case          'config' { @irc_cmds = $self->_monitor_config(@values) }
         case            'dump' { @irc_cmds = $self->_monitor_login(@values) }
         case         'runonce' { @irc_cmds = ($self->_monitor_runonce(@values), $self->heartbeat_res("exampleserver")) }
-        case      'hoststatus' { @irc_cmds = $self->_monitor_hoststatus(@values) }
-        case 'hostgroupstatus' { @irc_cmds = $self->_monitor_hostgroupstatus(@values)}
     }
 
     return map { sprintf 'msg %s %s: %s', $target, $nick, $_ } @irc_cmds;
@@ -302,39 +300,6 @@ sub _unmonitor_hostgroup
 
     # the PRIVMSG to return.
     return "OK - I think I just removed monitoring for hostgroup:[$hostgroup] on channel:[$channel] for servers matching re:[$server]";
-}
-
-sub _monitor_hoststatus
-{
-    my $self = shift;
-    # Here we handle the hoststatus of a given host.
-    # It gets downloaded, maybe update the db? TODO decide.
-    #
-    # Then return a list representation of that.
-    # THink some refactoring would be nice probably.
-    
-    # IT will return such info as:
-    #  * What is the status of the host itself?
-    #  * Which services are OK (aggregate unless some passed service)
-    #  * something like this.
-
-    return 'TODO';
-}
-
-sub _monitor_hostgroupstatus
-{
-    my $self = shift;
-    # Here we handle the hoststatus of a given host.
-    # It gets downloaded, maybe update the db? TODO decide.
-    #
-    # Then return a list representation of that.
-    # THink some refactoring would be nice probably.
-
-    # IT will return such info as:
-    #  * What is the status of the hosts included?
-    #  * What is the summary (ie services up/down, hosts up/down), stuff like that,
-
-    return 'TODO';
 }
 
 sub _monitor_runonce
@@ -644,7 +609,7 @@ sub __insert_new_servicestatus
     {
         while (my ($service, $sd) = each (%{$services}))
         {
-            $log->debug("I NOW AM DOING THIS for $hostname - $service `$$sd{plugin_output}`");
+            $log->trace("I NOW AM DOING THIS for $hostname - $service `$$sd{plugin_output}`");
             unless($sth->execute($$sd{'host_name'}, $service, $$sd{'plugin_output'}, $$sd{'state'}, $$sd{'has_been_checked'}, $timestamp))
             {
                 $log->warn(sprintf 'Updating monitor_servicedetail failed with msg:"%s". Rolling back.', $dbh->errstr());
@@ -900,7 +865,7 @@ sub __translate_return_codes:
         $log->warn("$service_or_host is neither 'service' nor 'host'")
     }
 
-    return $colors[$return_code] . $$what[$return_code]
+    return $colors[$return_code] . $$what[$return_code] . $Gutta::Color::Reset;
 
 }
 
