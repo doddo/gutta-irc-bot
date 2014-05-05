@@ -51,6 +51,21 @@ will remove monitoring for said server
 
 to add a single host.
 
+
+Sometimes the Nagios your connecting to sends a lot of bad alarms. Although it should be fixed in the nagios itself, gutta the bot can filter
+these messages with this command:
+
+ !monitor filter add [regex to filter out]
+
+then you can also delete the filter with this:
+
+ !monitor filter del [regex to remvoe]
+
+And to see what is filtered, do a
+
+ !monitor filter list
+
+
 =cut
 
 my $log;
@@ -112,6 +127,7 @@ sub _setup_shema
     CREATE TABLE IF NOT EXISTS monitor_hoststatus (
           host_name TEXT PRIMARY KEY,
               state INTEGER NOT NULL,
+        is_flapping INTEGER DEFAULT 0,
       plugin_output TEXT,
           timestamp INTEGER DEFAULT 0
     )}, qq{
@@ -119,6 +135,7 @@ sub _setup_shema
           host_name TEXT NOT NULL,
             service TEXT NOT NULL,
               state INTEGER DEFAULT 0,
+        is_flapping INTEGER DEFAULT 0,
       plugin_output TEXT,
    has_been_checked INTEGER DEFAULT 0,
           timestamp INTEGER DEFAULT 0,
@@ -144,6 +161,9 @@ sub _setup_shema
     FOREIGN KEY (host_name) REFERENCES monitor_hoststatus(host_name),
     FOREIGN KEY (service) REFERENCES monitor_servicedetail(service),
       CONSTRAINT uniq_service_per_host UNIQUE (host_name, service)
+    )}, qq{
+    CREATE TABLE IF NOT EXISTS monitor_filters (
+            filter TEXT PRIMARY KEY
     )});
 
     return @queries;
@@ -175,6 +195,7 @@ sub monitor
         case          'config' { @irc_cmds = $self->_monitor_config(@values) }
         case            'dump' { @irc_cmds = $self->_monitor_login(@values) }
         case         'runonce' { @irc_cmds = ($self->_monitor_runonce(@values), $self->heartbeat_res("exampleserver")) }
+        case          'filter' { @irc_cmds = $self->_monitor_filter(@values) }
     }
 
     return map { sprintf 'msg %s %s: %s', $target, $nick, $_ } @irc_cmds;
@@ -328,7 +349,7 @@ sub _monitor_runonce
     my $db_servicestatus = $self->_db_get_servicestatus();
 
 
-    $log->trace(Dumper($db_servicestatus));
+    $log->trace("DB_SERVICESTATUS:" . Dumper($db_servicestatus));
 
     # now remove the hostgroups from the monitor_hosts_from_hostgroup, it will need new hosts now.
     my $sth2 = $dbh->prepare('DELETE FROM monitor_hosts_from_hostgroup');
@@ -367,13 +388,14 @@ sub _monitor_runonce
 
                 $log->debug(sprintf 'got %s with state %i. been checked=%i', $hostname, $state, $has_been_checked);
                 # GET servicestatus AND some "valuable" info from the monitor API
-                (my $plugin_output, %{$api_servicestatus{$hostname}}) = $self->_api_get_host($hostname);
+                (my $plugin_output, my $is_flapping, %{$api_servicestatus{$hostname}}) = $self->_api_get_host($hostname);
 
                 # create the hoststatus hash to look the same as what we got from the db earlier (hopefully)
                 %{$api_hoststatus{$hostname}} = (
                                state => $state,
                     has_been_checked => $has_been_checked,
                        plugin_output => $plugin_output,
+                         is_flapping => $is_flapping
                 );
 
 
@@ -399,6 +421,10 @@ sub _monitor_runonce
         $log->debug("processing $hostname ...");
         $log->trace(Dumper($api_hoststatus{$hostname}));
 
+        # save these here so as to not have to type so much.
+        my $api_hoststate = $api_hoststatus{$hostname}{'state'};
+        my $api_is_flapping = $api_hoststatus{$hostname}{'is_flapping'};
+
         # check if new host exists in the database or not.
         unless ($$db_hoststatus{$hostname})
         {
@@ -412,7 +438,8 @@ sub _monitor_runonce
                 #         (http://nagios.sourceforge.net/docs/3_0/pluginapi.html)
                 $self->__insert_hosts_to_msg([$hostname, 3 ]);
             }
-        } elsif ($$db_hoststatus{$hostname}{'state'} != $api_hoststatus{$hostname}{'state'}){
+        } elsif ((($$db_hoststatus{$hostname}{'state'} != $api_hoststate) && $api_is_flapping == 0) ||
+                             ($api_is_flapping != $$db_hoststatus{$hostname}{'is_flapping'})) {
             # HOST STATUS CHANGE HERE.
             # This is important, because if a host is down, we dont want to send the alarms for that host.
             $log->debug(Dumper($api_hoststatus{$hostname}));
@@ -444,20 +471,26 @@ sub _monitor_runonce
                 }
 
                 #
-                # get the service state from API and database
+                # get the service state from API and database and whether it's flapping or not.
+                # We dont wanna spoam with flapping services.
                 #
-                my $api_sstate = $api_servicestatus{$hostname}{$service}{'state'};
-                my $db_sstate  = $$db_servicestatus{$hostname}{$service}{'state'};
+                my $api_sstate   = $api_servicestatus{$hostname}{$service}{'state'};
+                my $db_sstate    = $$db_servicestatus{$hostname}{$service}{'state'};
+                my $api_flapping = $api_servicestatus{$hostname}{$service}{'is_flapping'};
+                my $db_flapping  = $$db_servicestatus{$hostname}{$service}{'is_flapping'};
 
+                $log->trace( Dumper($$db_servicestatus{$hostname}{$service}) );
 
-                if ($api_sstate != $db_sstate)
+                if ((($api_sstate != $db_sstate) && $api_flapping == 0) || ($db_flapping != $api_flapping))
                 {
                     #
                     # Here we got a diff between what nagios says and last "known" status (ie what it said last time
                     # we checked, that's why this is an event we can send an alarm to or some such)
+                    # And its not flapping.
+                    #
+                    #  OR otherwise service have either started or stopped flapping.
                     #
                     $log->debug(sprintf 'service "%s" for host "%s" have changed state from %s to %s.:%s', $service, $hostname, $db_sstate, $api_sstate, $api_servicestatus{$hostname}{$service}{'plugin_output'});
-
 
                     # Prepare tha database for the new message about what's changed.
                     $self->__insert_services_to_msg([$hostname, $service, $db_sstate]);
@@ -504,14 +537,16 @@ sub _api_get_host
            'plugin_output' => $plugin_output,
                'host_name' => $host,
         'has_been_checked' => $has_been_checked,
+             'is_flapping' => 0, # TODO fix, requires extra api call.
         );
         $log->trace(sprintf 'from nagios: service for "%s": "%s" with state %i: "%s"', $host, $servicename, $state, $plugin_output);
     }
 
     # status message in human readable format.
     my $plugin_output = $$hostinfo{'plugin_output'};
+    my $is_flapping   = $$hostinfo{'is_flapping'};
 
-    return $plugin_output,  %host_services;
+    return $plugin_output, $is_flapping, %host_services;
 }
 
 
@@ -520,7 +555,7 @@ sub _db_get_hosts
     my $self = shift;
     my $dbh = $self->dbh();
 
-    my $sth = $dbh->prepare('SELECT state, host_name FROM monitor_hoststatus');
+    my $sth = $dbh->prepare('SELECT state, is_flapping, host_name FROM monitor_hoststatus');
 
     $sth->execute();
 
@@ -537,7 +572,12 @@ sub _db_get_servicestatus
     my $self = shift;
     my $dbh = $self->dbh();
     # Here the last known statuses are fetched from the database !!
-    my $sth = $dbh->prepare('SELECT state, host_name, has_been_checked, service FROM monitor_servicedetail');
+    my $sth = $dbh->prepare('SELECT state,
+                                    host_name,
+                                    has_been_checked,
+                                    service,
+                                    is_flapping
+                               FROM monitor_servicedetail');
 
     $sth->execute();
 
@@ -547,6 +587,42 @@ sub _db_get_servicestatus
     $log->trace(Dumper($hosts));
 
     return $hosts;
+}
+
+sub _monitor_filter
+{
+    my $self = shift;
+    # THE FUNCTION TO HANDLE FILTERS!!!
+    # this is ugly code so putting it in the middle of the program
+    # so ppl wqont see it so easy...
+    my $action = shift;
+    my $regex = join(' ',@_);
+
+    my $dbh = $self->dbh();
+    $action||='list';
+    my @responses;
+
+    if ($action eq 'add')
+    {
+        return "not specific enouyh regex" unless $regex;
+        my $sth = $dbh->prepare('INSERT INTO monitor_filters (filter) VALUES(?)');
+        $sth->execute($regex) or return "Got error:" .  $dbh->errstr();
+        return "OK added filter [$regex]\n";
+    } elsif ($action eq 'del') {
+        return "not specific enouyh regex" unless $regex;
+        my $sth = $dbh->prepare('DELETE FROM monitor_filters where filter = ?');
+        $sth->execute($regex) or return "Got error:" .  $dbh->errstr();
+        return "OK deleted.";
+    } else {
+        my $sth = $dbh->prepare('SELECT filter FROM monitor_filters');
+        $sth->execute();
+        # TODO: a message if there are 0 rows selected.
+        while (my ($filter) = $sth->fetchrow_array())
+        {
+            push (@responses, "this is a filter:'$filter'");
+        }
+        return @responses;
+   }
 }
 
 sub __get_request
@@ -598,19 +674,21 @@ sub __insert_new_servicestatus
 
     # prepairng to insert new stuff.
     my $sth  = $dbh->prepare(qq{INSERT OR REPLACE INTO monitor_servicedetail
-                           (host_name,
-                                service,
-                            plugin_output,
-                                      state,
-                             has_been_checked,
-                                     timestamp) VALUES(?,?,?,?,?,?)});
+                                                     ( host_name,
+                                                       service,
+                                                       plugin_output,
+                                                       state,
+                                                       is_flapping,
+                                                       has_been_checked,
+                                                       timestamp )
+                                              VALUES (?,?,?,?,?,?,?)});
 
     while (my ($hostname, $services) = each (%{$hoststatus}))
     {
         while (my ($service, $sd) = each (%{$services}))
         {
             $log->trace("I NOW AM DOING THIS for $hostname - $service `$$sd{plugin_output}`");
-            unless($sth->execute($$sd{'host_name'}, $service, $$sd{'plugin_output'}, $$sd{'state'}, $$sd{'has_been_checked'}, $timestamp))
+            unless($sth->execute($$sd{'host_name'}, $service, $$sd{'plugin_output'}, $$sd{'state'}, $$sd{'is_flapping'}, $$sd{'has_been_checked'}, $timestamp))
             {
                 $log->warn(sprintf 'Updating monitor_servicedetail failed with msg:"%s". Rolling back.', $dbh->errstr());
                 $dbh->rollback;
@@ -641,8 +719,6 @@ sub __insert_hosts_to_msg
         my ($host_name, $old_state) = @{$what2add};
         $sth->execute($host_name, $old_state);
     }
-
-
 }
 
 sub __insert_services_to_msg
@@ -785,7 +861,7 @@ sub heartbeat_res
                         # First take relevant info here so as to not have to type so much.
                         my $s = $$hoststatus{$$host_msg_cfg{'host_name'}};
                         $log->debug("Will send a message about $$host_msg_cfg{'host_name'} to $channel, saying  this: " . Dumper($s));
-                        # Format a nicely formatted message here TODO: color support.
+                        # Format a nicely formatted message here.
                         push @responses, sprintf 'msg %s %s is %s: %s', $channel, $$s{'host_name'}, $self->__translate_return_codes($$s{'state'}) , $$s{'plugin_output'};
                     } elsif ($$services{$$host_msg_cfg{'host_name'}}) {
                         # TODO: here can check if keys %{chan} > X to determine if something is *really* messed up
@@ -794,11 +870,15 @@ sub heartbeat_res
 
                         # First take relevant info here so as to not have to type so much.
                         my $s = $$services{$$host_msg_cfg{'host_name'}};
-                        $log->debug("Will send a message about $$host_msg_cfg{'host_name'} to $channel, saying  this: " . Dumper($s));
+
+                        $log->trace("Will send a message about $$host_msg_cfg{'host_name'} to $channel, saying  this: " . Dumper($s));
                         while (my ($service_name, $service_data) = each (%{$s}))
                         {
-                            $log->debug("Will send a message about $$host_msg_cfg{'host_name'} service $service_name to $channel, saying  this: " . Dumper($service_data));
-                            push @responses, sprintf 'msg %s %s "%s" is %s: %s', $channel, $$host_msg_cfg{'host_name'}, $service_name, $self->__translate_return_codes($$service_data{'state'}) , $$service_data{'plugin_output'};
+                            if ($self->__passes_filter($service_name))
+                            {
+                                $log->debug("Will I send a message about $$host_msg_cfg{'host_name'} service $service_name to $channel, saying  this: " . Dumper($service_data));
+                                push @responses, sprintf 'msg %s %s "%s" is %s: %s', $channel, $$host_msg_cfg{'host_name'}, $service_name, $self->__translate_return_codes($$service_data{'state'}) , $$service_data{'plugin_output'};
+                            }
                         }
                     }
                 }
@@ -868,5 +948,31 @@ sub __translate_return_codes:
     return $colors[$return_code] . $$what[$return_code] . $Gutta::Color::Reset;
 
 }
+
+sub __passes_filter
+{
+    my $self = shift;
+    # With the list of filters from filters list, check if something matches
+    # and return it.
+    my $service_to_check = shift;
+
+    my $dbh = $self->dbh();
+    my $sth = $dbh->prepare('SELECT filter FROM monitor_filters');
+    $sth->execute();
+
+    while (my ($filter) = $sth->fetchrow_array())
+    {
+        if ($service_to_check =~ m/$filter/)
+        {
+            # OK returning what filter matched.
+            $log->debug("Filtered output about '$service_to_check'. (caught in filter:'$filter')");
+            return 0;
+        }
+    }
+
+    # OK PASSED FILTER
+    return 1;
+}
+
 
 1;
