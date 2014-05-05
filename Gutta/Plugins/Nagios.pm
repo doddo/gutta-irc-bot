@@ -191,11 +191,13 @@ sub monitor
 
     switch (lc($subcmd))
     {
-        case       'hostgroup' { @irc_cmds = $self->_monitor_hostgroup(@values) }
-        case          'config' { @irc_cmds = $self->_monitor_config(@values) }
-        case            'dump' { @irc_cmds = $self->_monitor_login(@values) }
-        case         'runonce' { @irc_cmds = ($self->_monitor_runonce(@values), $self->heartbeat_res("exampleserver")) }
-        case          'filter' { @irc_cmds = $self->_monitor_filter(@values) }
+        case        'hostgroup' { @irc_cmds = $self->_monitor_hostgroup(@values) }
+        case           'config' { @irc_cmds = $self->_monitor_config(@values) }
+        case             'dump' { @irc_cmds = $self->_monitor_login(@values) }
+        case          'runonce' { @irc_cmds = $self->_monitor_runonce(@values) }
+        case           'filter' { @irc_cmds = $self->_monitor_filter(@values) }
+        case       'hoststatus' { @irc_cmds = $self->_monitor_hoststatus(@values) }
+        case 'hostsgroupstatus' { @irc_cmds = $self->_monitor_hostgroupstatus(@values) }
     }
 
     return map { sprintf 'msg %s %s: %s', $target, $nick, $_ } @irc_cmds;
@@ -321,6 +323,33 @@ sub _unmonitor_hostgroup
 
     # the PRIVMSG to return.
     return "OK - I think I just removed monitoring for hostgroup:[$hostgroup] on channel:[$channel] for servers matching re:[$server]";
+}
+
+
+sub _monitor_hoststatus
+{
+    my $self = shift;
+
+    # TODO:
+    # Check if data is up to date (or call _monitor_runconce)
+    # Return data for host if specified,
+    # or an executive summary.
+
+
+    return "here will be status for each host...";
+}
+
+sub _monitor_hostgroupstatus
+{
+    my $self = shift;
+
+    # TODO:
+    # Check if data is up to date (or call _monitor_runconce)
+    # Return data for hostgroup if specified,
+    # or an executive summary.
+
+
+    return "here will be status for each hostgroup...";
 }
 
 sub _monitor_runonce
