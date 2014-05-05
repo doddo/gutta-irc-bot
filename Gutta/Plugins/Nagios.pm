@@ -31,37 +31,57 @@ Provides Nagios connection to gutta bot
 
 Add support to have gutta check the nagios rest api for hostgroup status and send any alarms encounterd into the target channel or channels.
 
+
+
+=head1 monitor
+
+Monitor has a lot of subsections, such like "config", "hostgroup", and "host"
+
+=head2 config
 say this:
 
  '!monitor config --username monitor --password monitor --nagios-server 192.168.60.182'
 
 to configure a connection to monitor at 192.168.60.182 using username monitor and password monitor.
 
-Then start using it:
+=head2 hostgroup
 
 !monitor hostgroup unix-servers --irc-server .* --to-channel #test123123
 
 To add op5 irc monitoring for all servers in the unix-servers hostgroups on all servers, and send messages Crit, Warns and Clears to channel #test123123
 
-Similarly
+=head1 unmonitor
+
+unmonitor a lot of monitored things
+
+=head2 hostgroup
+
+unmonitor hostgroup allows you to unmonitor the hostgroups.
 
 !unmonitor hostgroup unix-servers
 
-will remove monitoring for said server
+will remove the monitoring for unix-servers hostgroup, if such monitoring was configured.
 
-to add a single host.
-
+=head1 filter
 
 Sometimes the Nagios your connecting to sends a lot of bad alarms. Although it should be fixed in the nagios itself, gutta the bot can filter
-these messages with this command:
+these messages with the add/del commands.
+
+=head2 add
+
+To add a filter which should never be sent to channel, do
 
  !monitor filter add [regex to filter out]
 
-then you can also delete the filter with this:
+=head2 del
+
+To delete the filter, do this:
 
  !monitor filter del [regex to remvoe]
 
-And to see what is filtered, do a
+=head2 list
+
+To see what is filtered, do a
 
  !monitor filter list
 
