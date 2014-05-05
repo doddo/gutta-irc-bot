@@ -7,9 +7,10 @@
 use strict;
 use warnings;
 use Gutta::DBI;
-
+use Data::Dumper;
 our $TARGET_SCHEMA = 1;
 my $sth;
+my @errors;
 
 my $dbi = Gutta::DBI->instance();
 
@@ -32,8 +33,19 @@ if ($user_version < 1)
     # Add extra field for nagios plugin
     #
 
-    my $sth = $dbh->prepare("ALTER TABLE monitor_servicedetail ADD COLUMN is_flapping INTEGER DEFAULT 0");
-    $sth->execute();
+    my $sth = $dbh->do(qq{
+            ALTER TABLE monitor_hoststatus ADD COLUMN is_flapping INTEGER DEFAULT 0;
+            ALTER TABLE monitor_servicedetail ADD COLUMN is_flapping INTEGER DEFAULT 0
+     }) or push @errors, $dbh->errstr();
+    
 }
 
-$sth = $dbh->do("PRAGMA user_version = $TARGET_SCHEMA");
+
+if (scalar @errors > 0) {
+    print "OOPs follwong things failed, manual intervention required:\n";
+    print Dumper(@errors);
+    exit 24;
+} else {
+    $sth = $dbh->do("PRAGMA user_version = $TARGET_SCHEMA");
+}
+print "OK.\n";
