@@ -2,23 +2,21 @@ package Gutta::Color;
 
 # enables colored output.
 #
-
-
-my $White = "0";
-my $Black = "1";
-my $Blue = "2";
-my $Green = "3";
-my $LightRed = "4";
-my $Brown = "5";
-my $Purple = "6";
-my $Orange = "7";
-my $Yellow = "8";
-my $LightGreen = "9";
-my $Cyan = "10";
-my $LightCyan = "11";
-my $LightBlue = "12";
-my $Pink = "13";
-my $Grey = "14";
-my $LightGrey = "15";
+$White = "0";
+$Black = "1";
+$Blue = "2";
+$Green = "3";
+$LightRed = "4";
+$Brown = "5";
+$Purple = "6";
+$Orange = "7";
+$Yellow = "8";
+$LightGreen = "9";
+$Cyan = "10";
+$LightCyan = "11";
+$LightBlue = "12";
+$Pink = "13";
+$Grey = "14";
+$LightGrey = "15";
 
 1;
