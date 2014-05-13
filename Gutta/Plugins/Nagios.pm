@@ -21,17 +21,13 @@ use Switch;
 
 Gutta::Plugins::Nagios
 
-
 =head1 SYNOPSIS
 
 Provides Nagios connection to gutta bot
 
-
 =head1 DESCRIPTION
 
 Add support to have gutta check the nagios rest api for hostgroup status and send any alarms encounterd into the target channel or channels.
-
-
 
 =head1 monitor
 
@@ -40,9 +36,9 @@ Monitor has a lot of subsections, such like "config", "hostgroup", and "host"
 =head2 config
 say this:
 
- '!monitor config --username monitor --password monitor --nagios-server 192.168.60.182'
+ '!monitor config --username monitor --password monitor --nagios-server 192.168.60.182' --prefix ALARM
 
-to configure a connection to monitor at 192.168.60.182 using username monitor and password monitor.
+to configure a connection to monitor at 192.168.60.182 using username monitor and password monitor. All alarms originating will be prefixed with "ALARM".
 
 =head2 hostgroup
 
@@ -84,7 +80,6 @@ To delete the filter, do this:
 To see what is filtered, do a
 
  !monitor filter list
-
 
 =cut
 
@@ -265,6 +260,7 @@ sub _monitor_config
            'username=s',
            'password=s',
      'check-interval=s',
+             'prefix=s',
       'nagios-server=s',
     ) or return "invalid options supplied:";
 
@@ -752,7 +748,6 @@ sub __insert_new_servicestatus
     }
 }
 
-
 sub __insert_hosts_to_msg
 {
     # insert a few rows to this table, and then gutta the bot knows what to msg in the channels about when the time comes.
@@ -816,6 +811,9 @@ sub heartbeat_res
 
     # timestamp
     my $timestamp = time; # TODO add timestamp to filter out "stale" alarms (it easy)
+
+    my $msgprefix = $self->get_config('prefix') || 'Nagios';
+
 
     # Here is the check for the HOST statuses, by querying the "monitor_message_host"
     # table to check if a new message's popped up.
@@ -911,7 +909,7 @@ sub heartbeat_res
                         my $s = $$hoststatus{$$host_msg_cfg{'host_name'}};
                         $log->debug("Will send a message about $$host_msg_cfg{'host_name'} to $channel, saying  this: " . Dumper($s));
                         # Format a nicely formatted message here.
-                        push @responses, sprintf 'msg %s %s is %s: %s', $channel, $$s{'host_name'}, $self->__translate_return_codes($$s{'state'}) , $$s{'plugin_output'};
+                        push @responses, sprintf 'msg %s %s %s: "%s": %s', $channel, $msgprefix, $self->__translate_return_codes($$s{'state'}), $$s{'host_name'}, $$s{'plugin_output'};
                     } elsif ($$services{$$host_msg_cfg{'host_name'}}) {
                         # TODO: here can check if keys %{chan} > X to determine if something is *really* messed up
                         # and write something about that, because there's a risk of flooding if sending too many PRIVMSGS.
@@ -926,7 +924,7 @@ sub heartbeat_res
                             if ($self->__passes_filter($service_name))
                             {
                                 $log->debug("Will I send a message about $$host_msg_cfg{'host_name'} service $service_name to $channel, saying  this: " . Dumper($service_data));
-                                push @responses, sprintf 'msg %s %s "%s" is %s: %s', $channel, $$host_msg_cfg{'host_name'}, $service_name, $self->__translate_return_codes($$service_data{'state'}) , $$service_data{'plugin_output'};
+                                push @responses, sprintf 'msg %s %s %s: %s "%s": %s', $channel, $msgprefix, $self->__translate_return_codes($$service_data{'state'}), $$host_msg_cfg{'host_name'}, $service_name, $$service_data{'plugin_output'};
                             }
                         }
                     }
@@ -1022,6 +1020,5 @@ sub __passes_filter
     # OK PASSED FILTER
     return 1;
 }
-
 
 1;
