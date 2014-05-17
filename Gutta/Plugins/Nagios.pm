@@ -229,6 +229,7 @@ sub monitor
         case          'runonce' { @irc_cmds = $self->_monitor_runonce(@values) }
         case           'filter' { @irc_cmds = $self->_monitor_filter(@values) }
         case       'hoststatus' { @irc_cmds = $self->_monitor_hoststatus(@values) }
+        case  'hostgroupstatus' { @irc_cmds = $self->_monitor_hostgroupstatus(@values) }
         case            'satus' { @irc_cmds = $self->_monitor_status(@values) }
     }
 
@@ -384,6 +385,33 @@ sub _monitor_status
 
     return "here will be status for each hostgroup...";
 }
+
+sub _monitor_hostgroupstatus
+{
+    # will summarize the configured hostgroups for the channel
+    # from which the request originated and send back an executive summary.
+    my $self = shift;
+    my $target = shift;
+
+    # First check is to see if the request came from a channel.
+    #if $target  TODO: fix this tomorrow.
+
+    my $sth = $dbh->prepare(qq{
+                          SELECT a.hostgroup,
+                count(host_name) total_hosts,
+                      sum(state) hosts_with_error,
+        sum(services_with_error) services_with_error_total
+                            FROM monitor_hostgroupstatus a
+                      INNER JOIN monitor_hostgroups b
+                              ON a.hostgroup = b.hostgroup
+                           WHERE channel = ?
+                        GROUP BY a.hostgroup
+    });
+
+
+    return "here will be status for each host...";
+}
+
 
 sub _monitor_runonce
 {
