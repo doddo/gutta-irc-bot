@@ -4,13 +4,13 @@ use strict;
 use warnings;
 use threads;
 use Thread::Queue;
+use Gutta::Init;
 use Gutta::DBI;
 use Gutta::Parser;
+use Gutta::Context;
 use Data::Dumper;
 use Switch;
 use Log::Log4perl;
-
-#use Gutta::Pluginit qw/@PLUGINS %PLUGINS %TASKS $HEARTBEAT $RESPONSES $TASKQUEUE/;
 
 use Module::Pluggable search_path => "Gutta::Plugins",
                       instantiate => 'new';
@@ -356,7 +356,6 @@ sub process_msg
     switch ($msgtype)
     {
         case 'PRIVMSG' { @irc_cmds = $self->process_privmsg($server, @payload) }
-
     }
 
     # if something returns IRC Commands, pass them through.
