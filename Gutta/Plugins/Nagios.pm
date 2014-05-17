@@ -178,8 +178,25 @@ sub _setup_shema
       CONSTRAINT uniq_service_per_host UNIQUE (host_name, service)
     )}, qq{
     CREATE TABLE IF NOT EXISTS monitor_filters (
-            filter TEXT PRIMARY KEY
-    )});
+             filter TEXT PRIMARY KEY
+    )}, qq{
+    CREATE VIEW IF NOT EXISTS monitor_hostgroupstatus AS
+            SELECT a.hostgroup,
+                   a.host_name,
+                   b.state,
+                   c.services_with_error
+              FROM monitor_hosts_from_hostgroup a
+        INNER JOIN monitor_hoststatus b
+                ON a.host_name = b.host_name
+        INNER JOIN (
+                            SELECT host_name,
+                   COUNT(state) AS services_with_error
+                              FROM monitor_servicedetail
+                             WHERE state > 0
+                          GROUP BY host_name
+                    ) c
+                ON c.host_name = b.host_name
+       });
 
     return @queries;
 
@@ -212,7 +229,7 @@ sub monitor
         case          'runonce' { @irc_cmds = $self->_monitor_runonce(@values) }
         case           'filter' { @irc_cmds = $self->_monitor_filter(@values) }
         case       'hoststatus' { @irc_cmds = $self->_monitor_hoststatus(@values) }
-        case 'hostsgroupstatus' { @irc_cmds = $self->_monitor_hostgroupstatus(@values) }
+        case            'satus' { @irc_cmds = $self->_monitor_status(@values) }
     }
 
     return map { sprintf 'msg %s %s: %s', $target, $nick, $_ } @irc_cmds;
@@ -355,7 +372,7 @@ sub _monitor_hoststatus
     return "here will be status for each host...";
 }
 
-sub _monitor_hostgroupstatus
+sub _monitor_status
 {
     my $self = shift;
 
