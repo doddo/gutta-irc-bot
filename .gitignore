@@ -3,4 +3,5 @@ plugindemo.pl
 *test*.pl
 *.swp
 *.db
+*.swo
 guttacli?.pl
