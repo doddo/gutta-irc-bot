@@ -236,6 +236,7 @@ sub monitor
         case           'filter' { @irc_cmds = $self->_monitor_filter(@values) }
         case       'hoststatus' { @irc_cmds = $self->_monitor_hoststatus(@values) }
         case  'hostgroupstatus' { @irc_cmds = $self->_monitor_hostgroupstatus($target, @values) }
+        case 'hostgroupdetails' { @irc_cmds = $self->_monitor_hostgroupdetails($target, @values) }
         case            'satus' { @irc_cmds = $self->_monitor_status(@values) }
     }
 
@@ -401,7 +402,62 @@ sub _monitor_hostgroupstatus
 
     my @responses;
 
-    # First check is to see if the request came from a channel.
+    # first check is to see if the request came from a channel.
+    if (substr($target, 0, 1) eq '#')
+    {
+        # first char was a #, so target is a channel.
+
+        #
+        my $dbh = $self->dbh();
+        my $nagios_server = $self->get_config('nagios-server');
+
+#https://192.168.60.182/monitor/index.php/listview?q=[hosts]\%20in\%20\%22unix-servers\%22
+        my $sth = $dbh->prepare(qq{
+                              select a.hostgroup,
+                    count(host_name) total_hosts,
+                          sum(state) hosts_with_error,
+            sum(services_with_error) services_with_error_total
+                                from monitor_hostgroupstatus a
+                          inner join monitor_hostgroups b
+                                  on a.hostgroup = b.hostgroup
+                               where channel = ?
+                            group by a.hostgroup
+        });
+
+        $sth->execute($target);
+
+        # todo: check how many rows were returned.
+
+        while(my ($hostgroup, $total_hosts, $hosts_with_error, $services_with_error_total) = $sth->fetchrow_array())
+        {
+            push @responses, sprintf '%12s have %3i hosts. %2i of the hosts are down. there are %3i services with error. https://%s/monitor/index.php/listview?q=[hosts]%%20in%%20%%22%s%%22',
+                      $hostgroup, $total_hosts, $hosts_with_error, $services_with_error_total, $nagios_server, $hostgroup;
+        }
+
+    } else {
+        # target was not a channel, but a nick maybe.
+        # what shall be replied? i don't know.
+
+        push @responses ,'hostgroupstatus works best if run from a channel with nagios hostgroup associated with it.';
+    }
+    
+
+    return @responses;
+}
+
+sub _monitor_hostgroupdetails
+{
+    # will summarize the configured hostgroups for the channel
+    # from which the request originated and send back an executive summary.
+    my $self = shift;
+    my $target = shift;
+
+    my $nagios_server = $self->get_config('nagios-server');
+
+
+    my @responses;
+
+    # first check is to see if the request came from a channel.
     if (substr($target, 0, 1) eq '#')
     {
         # first char was a #, so target is a channel.
@@ -410,37 +466,37 @@ sub _monitor_hostgroupstatus
         my $dbh = $self->dbh();
 
         my $sth = $dbh->prepare(qq{
-                              SELECT a.hostgroup,
-                    count(host_name) total_hosts,
-                          sum(state) hosts_with_error,
-            sum(services_with_error) services_with_error_total
+                              SELECT host_name,
+                                     state,
+                                     services_with_error
                                 FROM monitor_hostgroupstatus a
                           INNER JOIN monitor_hostgroups b
                                   ON a.hostgroup = b.hostgroup
                                WHERE channel = ?
-                            GROUP BY a.hostgroup
+                            GROUP BY host_name
         });
 
         $sth->execute($target);
 
-        # TODO: check how many rows were returned.
+        # todo: check how many rows were returned.
 
-        while(my ($hostgroup, $total_hosts, $hosts_with_error, $services_with_error_total) = $sth->fetchrow_array())
+        while(my ($host_name, $state, $services_with_error) = $sth->fetchrow_array())
         {
-            push @responses, sprintf '%12s have %3i hosts. %2i of the hosts are down. There are %3i services with error.',
-                                                    $hostgroup, $total_hosts, $hosts_with_error, $services_with_error_total;
+            push @responses, sprintf '%-8s is: %-7s (It has %2i services with error). http://%s/monitor/index.php/extinfo/details/host/%s',
+                   $host_name, $self->__translate_return_codes($state, 'host'), $services_with_error, $nagios_server, $host_name;
         }
 
     } else {
-        # Target was not a channel, but a nick maybe.
-        # what shall be replied? I don't know.
+        # target was not a channel, but a nick maybe.
+        # what shall be replied? i don't know.
 
-        return ('hostgroupstatus works best if run from a channel with Nagios hostgroup associated with it.');
+        push @responses ,'hostgroupdetails works best if run from a channel with nagios hostgroup associated with it.';
     }
     
 
     return @responses;
 }
+
 
 
 sub _monitor_runonce
@@ -1050,10 +1106,10 @@ sub __translate_return_codes:
                    $Gutta::Color::LightRed,
                    $Gutta::Color::LightRed );
 
-    my @host_states = [ 'UP',
-                        'UP or DOWN', # TODO FIX
+    my @host_states = ( 'UP',
+                        'DOWN', # TODO FIX
                         'DOWN',
-                        'DOWN'];
+                        'DOWN');
     my @service_states = qw/OK WARNING CRITICAL UNKNOWN/;
 
 
