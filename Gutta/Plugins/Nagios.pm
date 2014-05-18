@@ -31,7 +31,7 @@ Add support to have gutta check the nagios rest api for hostgroup status and sen
 
 =head1 monitor
 
-Monitor has a lot of subsections, such like "config", "hostgroup", and "host"
+Monitor has a lot of subsections, such like "config", "hostgroup", "host", "hostgroupstatus" and "status".
 
 =head2 config
 say this:
@@ -45,6 +45,12 @@ to configure a connection to monitor at 192.168.60.182 using username monitor an
 !monitor hostgroup unix-servers --irc-server .* --to-channel #test123123
 
 To add op5 irc monitoring for all servers in the unix-servers hostgroups on all servers, and send messages Crit, Warns and Clears to channel #test123123
+
+=head2 hostgroupstatus
+
+Get status summary from the hostgroups configured in originating #channel.
+
+!monitor hostgroupstatus
 
 =head1 unmonitor
 
@@ -229,7 +235,7 @@ sub monitor
         case          'runonce' { @irc_cmds = $self->_monitor_runonce(@values) }
         case           'filter' { @irc_cmds = $self->_monitor_filter(@values) }
         case       'hoststatus' { @irc_cmds = $self->_monitor_hoststatus(@values) }
-        case  'hostgroupstatus' { @irc_cmds = $self->_monitor_hostgroupstatus(@values) }
+        case  'hostgroupstatus' { @irc_cmds = $self->_monitor_hostgroupstatus($target, @values) }
         case            'satus' { @irc_cmds = $self->_monitor_status(@values) }
     }
 
@@ -308,8 +314,8 @@ sub unmonitor
     # Return gets put into here after suffixing.
     my @irc_cmds;
 
-    # they need someonw to slap
-    return "need more info. (Help not implemented yet)" unless $rest_of_msg;
+    # they need subcmd.
+    return "need more info. (try help unmonitor)" unless $rest_of_msg;
 
     # Cmd can look like this: !unmonitor hostgroup unix-servers
     # in which case rest of msg looks like this: hostgroup unix-server
@@ -393,23 +399,47 @@ sub _monitor_hostgroupstatus
     my $self = shift;
     my $target = shift;
 
+    my @responses;
+
     # First check is to see if the request came from a channel.
-    #if $target  TODO: fix this tomorrow.
+    if (substr($target, 0, 1) eq '#')
+    {
+        # first char was a #, so target is a channel.
 
-    my $sth = $dbh->prepare(qq{
-                          SELECT a.hostgroup,
-                count(host_name) total_hosts,
-                      sum(state) hosts_with_error,
-        sum(services_with_error) services_with_error_total
-                            FROM monitor_hostgroupstatus a
-                      INNER JOIN monitor_hostgroups b
-                              ON a.hostgroup = b.hostgroup
-                           WHERE channel = ?
-                        GROUP BY a.hostgroup
-    });
+        #
+        my $dbh = $self->dbh();
 
+        my $sth = $dbh->prepare(qq{
+                              SELECT a.hostgroup,
+                    count(host_name) total_hosts,
+                          sum(state) hosts_with_error,
+            sum(services_with_error) services_with_error_total
+                                FROM monitor_hostgroupstatus a
+                          INNER JOIN monitor_hostgroups b
+                                  ON a.hostgroup = b.hostgroup
+                               WHERE channel = ?
+                            GROUP BY a.hostgroup
+        });
 
-    return "here will be status for each host...";
+        $sth->execute($target);
+
+        # TODO: check how many rows were returned.
+
+        while(my ($hostgroup, $total_hosts, $hosts_with_error, $services_with_error_total) = $sth->fetchrow_array())
+        {
+            push @responses, sprintf '%12s have %3i hosts. %2i of the hosts are down. There are %3i services with error.',
+                                                    $hostgroup, $total_hosts, $hosts_with_error, $services_with_error_total;
+        }
+
+    } else {
+        # Target was not a channel, but a nick maybe.
+        # what shall be replied? I don't know.
+
+        return ('hostgroupstatus works best if run from a channel with Nagios hostgroup associated with it.');
+    }
+    
+
+    return @responses;
 }
 
 
@@ -954,7 +984,7 @@ sub heartbeat_res
                         my $s = $$hoststatus{$$host_msg_cfg{'host_name'}};
                         $log->debug("Will send a message about $$host_msg_cfg{'host_name'} to $channel, saying  this: " . Dumper($s));
                         # Format a nicely formatted message here.
-                        push @responses, sprintf 'msg %s %s %s: "%s": %s', $channel, $msgprefix, $self->__translate_return_codes($$s{'state'}), $$s{'host_name'}, $$s{'plugin_output'};
+                        push @responses, sprintf 'msg %s %s %s: "%s": %s', $channel, $msgprefix, $self->__translate_return_codes($$s{'state'},'host'), $$s{'host_name'}, $$s{'plugin_output'};
                     } elsif ($$services{$$host_msg_cfg{'host_name'}}) {
                         # TODO: here can check if keys %{chan} > X to determine if something is *really* messed up
                         # and write something about that, because there's a risk of flooding if sending too many PRIVMSGS.
