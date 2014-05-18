@@ -194,7 +194,7 @@ sub _setup_shema
               FROM monitor_hosts_from_hostgroup a
         INNER JOIN monitor_hoststatus b
                 ON a.host_name = b.host_name
-        INNER JOIN (
+         LEFT JOIN (
                             SELECT host_name,
                    COUNT(state) AS services_with_error
                               FROM monitor_servicedetail
@@ -426,8 +426,8 @@ sub _monitor_hostgroupstatus
 
         $sth->execute($target);
 
-        # todo: check how many rows were returned.
 
+        # OK create the responses.
         while(my ($hostgroup, $total_hosts, $hosts_with_error, $services_with_error_total) = $sth->fetchrow_array())
         {
             push @responses, sprintf '%12s have %3i hosts. %2i of the hosts are down. there are %3i services with error. https://%s/monitor/index.php/listview?q=[hosts]%%20in%%20%%22%s%%22',
@@ -436,7 +436,7 @@ sub _monitor_hostgroupstatus
 
     } else {
         # target was not a channel, but a nick maybe.
-        # what shall be replied? i don't know.
+        # what shall be replied? i don't know. (it depends, maybe add some logic to pass optional value for hostgroup to check or something
 
         push @responses ,'hostgroupstatus works best if run from a channel with nagios hostgroup associated with it.';
     }
@@ -453,7 +453,6 @@ sub _monitor_hostgroupdetails
     my $target = shift;
 
     my $nagios_server = $self->get_config('nagios-server');
-
 
     my @responses;
 
@@ -477,9 +476,7 @@ sub _monitor_hostgroupdetails
         });
 
         $sth->execute($target);
-
-        # todo: check how many rows were returned.
-
+        
         while(my ($host_name, $state, $services_with_error) = $sth->fetchrow_array())
         {
             push @responses, sprintf '%-8s is: %-7s (It has %2i services with error). http://%s/monitor/index.php/extinfo/details/host/%s',
@@ -492,7 +489,6 @@ sub _monitor_hostgroupdetails
 
         push @responses ,'hostgroupdetails works best if run from a channel with nagios hostgroup associated with it.';
     }
-    
 
     return @responses;
 }
