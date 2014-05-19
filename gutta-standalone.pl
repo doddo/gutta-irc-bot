@@ -16,6 +16,7 @@ use threads;
 use threads::shared;
 
 chdir(dirname(__FILE__));
+use Gutta::Init qw/guttainit/;
 use Gutta::AbstractionLayer;
 use Log::Log4perl;
 
@@ -47,8 +48,16 @@ GetOptions (
 $login||=$own_nick;
 
 
+# Initialise the gutta runtime environment:
+#
+guttainit();
+
+
+# Start the Gutta::AbstractionLayer.
 my $gal = Gutta::AbstractionLayer->new(parse_response => 1,
                                              own_nick => $own_nick);
+
+
 
 $log->info("Connecting to server");
 
@@ -139,7 +148,7 @@ sub plugin_responses
             foreach my $irc_cmd (@irc_cmds)
             {
                 $log->info(sprintf" < %s", $irc_cmd);
-                print $sock $irc_cmd;
+                print $sock $irc_cmd; #TODO rate limiting "human typing speed"
             }
         };
         warn $@ if $@; #TODO fix.

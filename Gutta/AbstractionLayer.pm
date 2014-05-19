@@ -4,7 +4,6 @@ use strict;
 use warnings;
 use threads;
 use Thread::Queue;
-use Gutta::Init;
 use Gutta::DBI;
 use Gutta::Parser;
 use Gutta::Context;
@@ -85,6 +84,7 @@ sub new
     my $self = bless {
                db => Gutta::DBI->instance(),
            parser => Gutta::Parser->new(),
+          context => Gutta::Context->new(),
    parse_response => $params{parse_response},
          own_nick => $params{own_nick}||'gutta',
           workers => [],
@@ -153,7 +153,10 @@ sub _load_triggers
         if (my $t = $plugin->_triggers())
         {
             $log->debug(sprintf "loaded %i triggers for %s\n", scalar keys %{$t}, $plugin_key);
-            $triggers{$plugin_key} = $t
+            $triggers{$plugin_key} = $t;
+
+            # Loading the context with these triggers now.
+            $self->{context}->set_plugincontext($plugin_key, 'triggers', keys %{$t});
         } else {
             $log->debug(sprintf "loaded 0 triggers for %s\n", $plugin_key);
         }
@@ -179,6 +182,8 @@ sub _load_commands
         {
             $log->debug(sprintf "loaded %i commands for %s", scalar keys %{$t}, $plugin_key);
             $commands{$plugin_key} = $t;
+            # Loading the context with these commands now.
+            $self->{context}->set_plugincontext($plugin_key, 'commands',  keys %{$t});
         } else {
             $log->debug(sprintf "loaded 0 commands for %s", $plugin_key);
         }

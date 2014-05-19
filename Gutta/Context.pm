@@ -58,51 +58,6 @@ sub dbh
      return $self->{ dbh };
 }
 
-sub  swipeinit_sessiondb
-{
-    # the function to remove the old data file and create a new one.
-    # this one should be called before any plugins starts instantiating.
-    my $self = shift;
-
-    if ( -e $self->{ dbfile })
-    {
-        $log->debug("removing old session db file...");
-        unlink ( $self->{ dbfile }) or die $!;
-    }
-    
-    my $dbh = $self->{ internaldbh };
-    my $sth;
-
-    my @queries = (qq{
-     CREATE TABLE  plugins_commands (
-        plugin_name TEXT NOT NULL,
-            command TEXT NOT NULL
-      PRIMARY KEY (plugin_name, command) ON CONFLICT REPLACE
-
-    )}, qq{
-     CREATE TABLE plugins_triggers (
-        plugin_name TEXT NOT NULL,
-            trigger TEXT NOT NULL
-      PRIMARY KEY (plugin_name, trigger) ON CONFLICT REPLACE
-    )}, qq{
-     CREATE TABLE nicks (
-               nick TEXT NOT NULL,
-            channel TEXT NOT NULL
-      PRIMARY KEY (nick, channel) ON CONFLICT IGNORE
-    )} );
-
-
-    foreach my $query (@queries)
-    {
-        $sth = $dbh->prepare($query) or die "unable to run: $query\n";
-        $sth->execute() or  die "unable to execute; $query\n:  $dbh->errstr;";
-    }
-
-}
-
-
-
-
 sub update_context
 {
     my $self = shift;
@@ -111,24 +66,24 @@ sub update_context
     # QUITS and so forth.
     # Keep this stored somewhere.
     
-
-    
-
 }
 
 
-sub set_plugin_to_commandsmap
+sub set_plugincontext
 {
-    my $self;
-    my $commands = shift;
+    my $self = shift;
+    my $plugin_name = shift;
+    my $what_it_is = shift;
+    my @payload = @_;
 
-    my $dbh = $self->{ db }->dbh();
+    my $dbh = $self->dbh();
 
+    my $sth = $dbh->prepare('INSERT INTO pluginmeta (plugin_name, what_it_is, value) VALUES(?,?,?)');
 
-
-    my $sth
-
+    foreach my $value (@payload)
+    {
+        $log->debug("setting $what_it_is for $plugin_name: $value");
+        $sth->execute($plugin_name, $what_it_is, $value);
+    }
 
 }
-
-
