@@ -14,10 +14,9 @@ use IO::Socket;
 use Getopt::Long;
 use threads;
 use threads::shared;
+use Gutta::AbstractionLayer;
 
 chdir(dirname(__FILE__));
-use Gutta::Init qw/guttainit/;
-use Gutta::AbstractionLayer;
 use Log::Log4perl;
 
 my $server;
@@ -46,11 +45,6 @@ GetOptions (
 #
 
 $login||=$own_nick;
-
-
-# Initialise the gutta runtime environment:
-#
-guttainit();
 
 
 # Start the Gutta::AbstractionLayer.

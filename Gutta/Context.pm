@@ -43,9 +43,6 @@ sub new
 
     $self->{ dbfile } = "Gutta/Data/session.db";
 
-    # get a db handle for internal use.
-    $self->{internaldbh} = $self->dbh();
-
     return $self;
 }
 
@@ -53,7 +50,7 @@ sub dbh
 {
     my $self = shift;
     my $db = $self->{ dbfile };
-    $self->{ dbh } = DBI->connect("dbi:SQLite:dbname=${db}","","")
+    $self->{ dbh } ||= DBI->connect("dbi:SQLite:dbname=${db}","","")
          || die "Cannot connect to database: $DBI::errstr";
      return $self->{ dbh };
 }
@@ -67,7 +64,6 @@ sub update_context
     # Keep this stored somewhere.
     
 }
-
 
 sub set_plugincontext
 {
@@ -85,5 +81,20 @@ sub set_plugincontext
         $log->debug("setting $what_it_is for $plugin_name: $value");
         $sth->execute($plugin_name, $what_it_is, $value);
     }
+}
 
+sub get_plugin_commands
+{
+    my $self = shift;
+
+    my $dbh = $self->dbh();
+
+    my $sth = $dbh->prepare('SELECT plugin_name, value FROM pluginmeta where what_it_is = "commands"');
+
+    $sth->execute();
+
+    my $r = $sth->fetchall_hashref('value');
+
+    return $r;
+    
 }

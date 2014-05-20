@@ -34,6 +34,7 @@ Add support to have gutta check the nagios rest api for hostgroup status and sen
 Monitor has a lot of subsections, such like "config", "hostgroup", "host", "hostgroupstatus" and "status".
 
 =head2 config
+
 say this:
 
  '!monitor config --username monitor --password monitor --nagios-server 192.168.60.182' --prefix ALARM
@@ -52,6 +53,30 @@ Get status summary from the hostgroups configured in originating #channel.
 
 !monitor hostgroupstatus
 
+=head2 filter
+
+Sometimes the Nagios your connecting to sends a lot of bad alarms. Although it should be fixed in the nagios itself, gutta the bot can filter
+these messages with the add/del commands.
+
+=head3 add
+
+To add a filter which should never be sent to channel, do
+
+ !monitor filter add [regex to filter out]
+
+=head3 del
+
+To delete the filter, do this:
+
+ !monitor filter del [regex to remvoe]
+
+=head3 list
+
+To see what is filtered, do a
+
+ !monitor filter list
+
+
 =head1 unmonitor
 
 unmonitor a lot of monitored things
@@ -64,28 +89,6 @@ unmonitor hostgroup allows you to unmonitor the hostgroups.
 
 will remove the monitoring for unix-servers hostgroup, if such monitoring was configured.
 
-=head1 filter
-
-Sometimes the Nagios your connecting to sends a lot of bad alarms. Although it should be fixed in the nagios itself, gutta the bot can filter
-these messages with the add/del commands.
-
-=head2 add
-
-To add a filter which should never be sent to channel, do
-
- !monitor filter add [regex to filter out]
-
-=head2 del
-
-To delete the filter, do this:
-
- !monitor filter del [regex to remvoe]
-
-=head2 list
-
-To see what is filtered, do a
-
- !monitor filter list
 
 =cut
 

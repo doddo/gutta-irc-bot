@@ -6,11 +6,18 @@ use threads;
 use Thread::Queue;
 use Gutta::DBI;
 use Gutta::Parser;
+use Gutta::Init qw/guttainit/;
 use Gutta::Context;
 use Data::Dumper;
 use Switch;
 use Log::Log4perl;
 
+
+# Initialise the gutta runtime environment:
+#
+guttainit();
+
+# Instantiate all the plugins.
 use Module::Pluggable search_path => "Gutta::Plugins",
                       instantiate => 'new';
 
