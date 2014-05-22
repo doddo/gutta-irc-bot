@@ -5,6 +5,36 @@ use Gutta::DBI;
 use strict;
 use warnings;
 
+=head1 NAME
+
+Gutta::Plugins::Karma
+
+=head1 SYNOPSIS
+
+Give karma-- to someone++
+
+=head1 DESCRIPTION
+
+Like most IRC bots, Gutta::IRC::Bot tracks karma. You give or remove karma points with the ++ and -- operators. Karma can be checked with the rank command. 
+
+=head1 rank
+
+rank something, to see the karma (but not the rank yet). if something is omitted, print who is on top.
+
+!rank something
+
+=head1 srank
+
+print the top 10 entries like something. if something is omitted, print instead top 10 list. 
+
+!srank [ something ]
+
+=cut 
+
+
+
+
+
 sub _initialise
 {
     my $self = shift;
@@ -14,13 +44,26 @@ sub _initialise
 sub _setup_shema 
 {
     my $self = shift;
-    return <<EOM
+
+    my @queries  = (qq{
     CREATE TABLE IF NOT EXISTS karma_table (
             item TEXT PRIMARY KEY,
             karma INTEGER DEFAULT 0
-    );
-EOM
-;
+    )}, qq{
+    CREATE VIEW IF NOT EXISTS karma_toplist AS
+        SELECT item,
+               karma,
+               (
+                SELECT COUNT(*) + 1
+                FROM karma_table AS t2
+                WHERE t2.karma > t1.karma
+               ) AS rank
+        FROM karma_table AS t1
+        ORDER BY karma DESC;
+    });
+
+    return @queries;
+ 
 }
 
 sub _triggers
@@ -32,9 +75,22 @@ sub _triggers
     return {
         qr/([a-z0-9_@.ÅÄÖåäö]+?)(\+\+|--)/i => sub { $self->give_karma(@_) },
                                 qr/^srank/  => sub { $self->srank(@_) },
-                                 qr/^rank/  => sub { $self->sank(@_) },
+                                 qr/^rank/  => sub { $self->rank(@_) },
     };
 }
+
+sub _commands
+{
+    # The dispatch table for "commands" which will be triggered
+    # when one of them matches the IRC message.
+    my $self = shift;
+
+    return {
+           'srank' => sub { $self->srank(@_) },
+           'rank'  => sub { $self->rank(@_) },
+    };
+}
+
 
 sub srank
 {
@@ -60,9 +116,8 @@ sub srank
     
     # List top 10 karma items matching $target_item
     my $sth = $dbh->prepare(q{
-        SELECT item, karma FROM karma_table 
+        SELECT item, karma, rank FROM karma_toplist
          WHERE item LIKE ? 
-      ORDER BY karma DESC LIMIT 10
     });
     $sth->execute($target_item);    
 
@@ -71,9 +126,9 @@ sub srank
     #
     # forma t response based on query (and context)
     
-    while ( my($item, $karma) = $sth->fetchrow_array())
+    while ( my($item, $karma, $rank) = $sth->fetchrow_array())
     {
-        push @responses, sprintf 'msg %s %s (%i)', $target, $item, $karma;
+        push @responses, sprintf 'msg %s %-9s (%i) (rank %i)', $target, $item, $karma, $rank;
     }
     return @responses;
 
@@ -117,14 +172,14 @@ sub give_karma
         $sth->execute($item);
         $sth = $dbh->prepare("UPDATE karma_table SET karma = karma +? WHERE item = ?");
         $sth->execute($value,$item);
-        $sth = $dbh->prepare("SELECT karma FROM karma_table WHERE item = ?");
+        $sth = $dbh->prepare("SELECT karma, rank FROM karma_toplist WHERE item = ?");
         $sth->execute($item);
         
         # And then get the value (karma) from the SELECT
-        my $karma = $sth->fetchrow_array() or warn $dbh->errstr;
+        my ($karma, $rank) = $sth->fetchrow_array() or warn $dbh->errstr;
 
         # and then finally, push the responses
-        push @responses, sprintf 'msg %s %s now has %i points of karma.', $target, $item, $karma
+        push @responses, sprintf 'msg %s %s now has %i points of karma (rank %i).', $target, $item, $karma, $rank;
 
     }
 

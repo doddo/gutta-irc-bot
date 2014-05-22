@@ -5,6 +5,36 @@ use parent Gutta::Plugin;
 use LWP::Simple;
 use HTML::TokeParser;
 
+
+=head1 NAME
+
+Gutta::Plugins::Ibood
+
+=head1 SYNOPSIS
+
+Get things from ibood.com on belgian language
+
+
+=head1 DESCRIPTION
+
+This was part of the original all-around-irssi-bot found on github, from which gutta-irc-bot is derived.
+
+=head1 ibood
+
+Get some prices from ibood.
+
+=cut
+
+sub _commands
+{
+    my $self = shift;
+    # the commands for the auth plugin.
+    return {
+
+        'ibood' => sub { $self->process_msg( @_) },
+    }
+}
+
 sub process_msg
 {
     my $self = shift;
@@ -13,13 +43,7 @@ sub process_msg
     my $mask = shift;
     my $target = shift;
 
-
-    if ($msg =~ /^\s*!ibood/)
-    { 
-       return "msg $target " . $self->ibood();
-    } else { 
-       return undef;
-    }
+    return "msg $target " . $self->ibood();
 }
 
 sub ibood

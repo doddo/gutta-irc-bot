@@ -12,7 +12,6 @@ use Data::Dumper;
 
 Gutta::Plugins::Auth
 
-
 =head1 SYNOPSIS
 
 Provides "authentication support" for gutta.
@@ -25,6 +24,46 @@ Uses the Gutta::Users and DB handle to handle users.
 then they can identify, have different access levels or what ever.
 
 some commands should only be run by "trusted" people, and this is to prevent untrusted users from abusing guttas power.
+
+
+=head1 identify
+
+Identify yourself after having registered:
+
+!identify PASSWORD
+
+=head1 register
+
+Make yourself known to Gutta
+
+!register PASSWORD  [ EMAIL ]
+
+=head1 passwd
+
+Change password if registered and identified
+
+!passwd OLDPASSWORD NEWPASSWORD
+
+
+=head1 admin
+
+Add or delete admins
+
+!admin [ add | del ] NICK
+
+
+=head2 add
+
+Add a user as admin (any admin may do this)
+
+!admin add NICK
+
+
+=head2
+
+del a user as admin (any admin may do this)
+
+!admin del NICK
 
 =cut
 
@@ -125,7 +164,7 @@ sub process_cmd
 
         } else {
             # help the user with syntax help.
-            return "msg $target Like this: admin add|del <nick>";
+            return "msg $target Like this: admin add|del <nick> (see !help admin for more info)";
         }
     }
 

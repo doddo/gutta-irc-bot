@@ -35,7 +35,11 @@ Monitor has a lot of subsections, such like "config", "hostgroup", "host", "host
 
 =head2 config
 
-say this:
+Used like this:
+
+ '!monitor config [ --username NAGIOSUSERNAME ] [ --password PASSWORD  ] [ --nagios-server HOSTNAME ] [ --prefix PREFIX ]
+
+for example say this:
 
  '!monitor config --username monitor --password monitor --nagios-server 192.168.60.182' --prefix ALARM
 
@@ -57,6 +61,8 @@ Get status summary from the hostgroups configured in originating #channel.
 
 Sometimes the Nagios your connecting to sends a lot of bad alarms. Although it should be fixed in the nagios itself, gutta the bot can filter
 these messages with the add/del commands.
+
+ !monitor filter [ add FILTER | del FILTER | list ]
 
 =head3 add
 
@@ -80,6 +86,8 @@ To see what is filtered, do a
 =head1 unmonitor
 
 unmonitor a lot of monitored things
+
+!unmonitor hostgroup HOSTGROUP
 
 =head2 hostgroup
 
