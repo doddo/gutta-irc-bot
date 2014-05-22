@@ -48,7 +48,7 @@ sub help
     #return unless $rest_of_msg;
     if (! $rest_of_msg)
     {
-        # HERE IS WHAT HAPPENS IF THERE IS A NO HELP LIKE 
+        # HERE IS WHAT HAPPENS IF THERE IS A NO HELP LIKE
         # THERE SHOULD BE TOC HERE
         @responses = (
             "msg $target Gutta Help Centre, can help with following topics:",
@@ -77,14 +77,14 @@ sub help
            
             my $filehandle = \*HELPVAR;
 
-            # OK is there an interest in the subtopics? 
+            # OK is there an interest in the subtopics?
             if (@subcmds)
             {
                 # escape all the regexes.
                 my @escaped = map { quotemeta $_ } @subcmds;
 
                 # then construct the string to be used.
-                push @topics, join('/', quotemeta $command, @escaped);
+                push @topics, join('/', quotemeta $command, @escaped, '!.+');
             } else {
                  # OK avoid help to traverse into subdirs /BY DEFAULT
                  # http://search.cpan.org/~marekr/Pod-Parser-1.62/lib/Pod/Select.pm
@@ -95,6 +95,7 @@ sub help
 
             pod2usage( -verbose => 99,
                       -sections =>  [  @topics  ],
+                       -message => "HELP FOR $rest_of_msg",
                          -input => $file_to_check,
                         -output => $filehandle,
                        -exitval => 'NOEXIT');

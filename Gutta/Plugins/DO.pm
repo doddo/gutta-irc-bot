@@ -5,6 +5,34 @@ use Gutta::Users;
 
 use parent Gutta::Plugin;
 
+use strict;
+use warnings;
+
+=head1 NAME
+
+Gutta::Plugins::DO
+
+=head1 SYNOPSIS
+
+Facilities to make bot DO things.
+
+=head1 DESCRIPTION
+
+Tell bot what to DO and it will try to execute.
+
+=head1 DO
+
+Bot can DO things: Whatever printed after the DO keyword will be parsed and done on the server from which the command executed.
+
+For example:
+
+!DO JOIN #Linux
+
+And gutta irc bot will join #Linux, (or try atleast).
+
+=cut
+
+
 sub _initialise
 {
     # initialising the DO module
