@@ -32,7 +32,7 @@ print the top 10 entries like something. if something is omitted, print instead 
 =cut 
 
 
-
+my $log = Log::Log4perl->get_logger(__PACKAGE__);
 
 
 sub _initialise
@@ -130,6 +130,11 @@ sub srank
     {
         push @responses, sprintf 'msg %s %-9s (%i) (rank %i)', $target, $item, $karma, $rank;
     }
+
+    # What shall we say of there is nothing to say? Nothing I guess.
+
+    $log->debug(sprintf "returning %i rows of karma", scalar @responses);
+
     return @responses;
 
 }

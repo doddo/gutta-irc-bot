@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use Data::Dumper;
 use Gutta::DBI;
+use Gutta::Parser;
 use Log::Log4perl;
 
 =head1 NAME
@@ -17,7 +18,7 @@ Using the Gutta::Parser etc, the Gutta::Context keeps track of everything the bo
 =head1 DESCRIPTION
 
 Gutta::Context contains real-time information about everything gutta the IRC bot knows. This includes but is not
-limited to  what channels the bot have joined, what nicks are in that channel. If the server have said anything "of value" about a nick
+lgmited to  what channels the bot have joined, what nicks are in that channel. If the server have said anything "of value" about a nick
 then the Gutta::Context shall keep track of this for Gutta aswell.
 
 In addition to this, some plugins may need some information about eachother, and such knowledge are provided by the Gutta::Context.
@@ -35,6 +36,7 @@ THIS IS YET A STUB.
 
 # The logger
 my $log = Log::Log4perl->get_logger(__PACKAGE__);
+my $parser = Gutta::Parser->new();
 
 sub new
 {
@@ -78,7 +80,7 @@ sub set_plugincontext
 
     foreach my $value (@payload)
     {
-        $log->debug("setting $what_it_is for $plugin_name: $value");
+        $log->trace("setting $what_it_is for $plugin_name: $value");
         $sth->execute($plugin_name, $what_it_is, $value);
     }
 }

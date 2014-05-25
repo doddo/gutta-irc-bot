@@ -46,6 +46,8 @@ GetOptions (
 
 $login||=$own_nick;
 
+$log->info("Now starting Gutta irc bot.");
+
 
 # Start the Gutta::AbstractionLayer.
 my $gal = Gutta::AbstractionLayer->new(parse_response => 1,

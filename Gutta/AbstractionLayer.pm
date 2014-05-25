@@ -114,8 +114,6 @@ sub new
     $self->__start_workers();
 
 
-
-
     return $self;
 }
 
@@ -367,7 +365,8 @@ sub process_msg
 
     switch ($msgtype)
     {
-        case 'PRIVMSG' { @irc_cmds = $self->process_privmsg($server, @payload) }
+        case   'PRIVMSG' { @irc_cmds = $self->process_privmsg($server, @payload) }
+        case /JOIN|PART/ { @irc_cmds = $self->process_join_or_part($server, $msgtype, @payload) }
     }
 
     # if something returns IRC Commands, pass them through.
@@ -487,5 +486,20 @@ sub process_privmsg
     # else just return it as is.
     return @responses;
 }
+
+sub process_join_or_part
+{
+    my $self = shift;
+    my $server = shift;
+    my $what = shift;
+    my $who = shift;
+
+    $log->debug("I just found out that $who $what:ed");
+
+    # TODO STUB
+
+    return;
+}
+
 
 1;
