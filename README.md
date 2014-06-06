@@ -25,6 +25,8 @@ The plugins are expected to return a conventional irc message and supports a mul
 ### Available plugins:
 
 | Name  | Desc |
+
+------------- | -------------
 |  Gutta::Plugins::Auth | Support for running administrative commands etc |
 |  Gutta::Plugins::DO | Make bot run any irc command |
 |  Gutta::Plugins::Help | Provide help messages |
@@ -96,7 +98,7 @@ This version of Gutta requires at least perl 5.10.
 
 ```bash
  sudo apt-get install libdbi-perl \
-	              libcrypt-passwdmd5-perl \
+                      libcrypt-passwdmd5-perl \
                       libclass-std-storable-perl \
                       libclass-dbi-sqlite-perl \
                       liblog-log4perl-perl \
