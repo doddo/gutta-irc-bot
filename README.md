@@ -2,16 +2,8 @@
 
 Gutta is a modular IRC bot with powerful plugin interface and a small footprint.
 
-## Install
 
-Install perl and all required modules.
-
-Then it is ready to go.
-
-This version of Gutta requires at least perl 5.10.
-
-
-### Standalone mode
+## Standalone mode
 
 run
 
@@ -30,7 +22,17 @@ Gutta works with plugins, who recieves messages parsed by the Gutta::Abstraction
 
 The plugins are expected to return a conventional irc message and supports a multitude of options.
 
+### Available plugins:
 
+| Name  | Desc |
+|  Gutta::Plugins::Auth | Support for running administrative commands etc |
+|  Gutta::Plugins::DO | Make bot run any irc command |
+|  Gutta::Plugins::Help | Provide help messages |
+|  Gutta::Plugins::Ibood | Does something with Ibood |
+|  Gutta::Plugins::Jira | Integrating with atlassian Jira |
+|  Gutta::Plugins::Karma | Managing karma |
+|  Gutta::Plugins::Nagios | Integrate with Nagios API for sending alarms |
+|  Gutta::Plugins::Slap | Slap with bot |
 
 ### Writing Plugins
 
@@ -60,18 +62,18 @@ sub slap
     
     # they need someonw to slap
     return unless $rest_of_msg;
-
-    return "msg $target \001ACTION  slaps $rest_of_msg  around a bit with a large trout.";
+     
+    # Plugin regurns one or more strings with IRC commands.
+    return "msg $target me slaps $rest_of_msg  around a bit with a large trout.";
 }
 
 
 sub _commands
 {
     my $self = shift;
-    # override this in plugin to set custom triggers
-    #
-    # The dispatch table for "triggers" which will be triggered
-    # when one of them matches the IRC message.
+    # Commands are privmsg:s starting with the customizable cmdprefix
+    # which is either <bot nick>:<command> or simply !<command>.
+    # What command to trigger, and a sub to handle the message is required like this:
     return {
 
         "slap" => sub { $self->slap(@_) },
@@ -81,3 +83,56 @@ sub _commands
 1;
 
 ```
+
+## Install
+
+Install perl and all required modules.
+
+Then it is ready to go.
+
+This version of Gutta requires at least perl 5.10.
+
+### For ubuntu mint debian etc
+
+```bash
+ sudo apt-get install libdbi-perl \
+	              libcrypt-passwdmd5-perl \
+                      libclass-std-storable-perl \
+                      libclass-dbi-sqlite-perl \
+                      liblog-log4perl-perl \
+                      libswitch-perl \
+                      libdatetime-perl \
+                      libdatetime-format-strptime-perl \
+                      libdatetime-perl \
+                      libhtml-strip-perl \
+                      libxml-feedpp-perl \
+                      libjson-perl
+```
+
+### For Fedora and similar
+
+```bash
+ sudo  yum  install   'perl(Crypt::PasswdMD5)'  \
+                      'perl(Data::Dumper)'  \
+                      'perl(DateTime)' \
+                      'perl(DateTime::Format::Strptime)' \
+                      'perl(DBI)' \
+                      'perl(File::Basename)' \
+                      'perl(Getopt::Long)' \
+                      'perl(HTML::Strip)' \
+                      'perl(HTML::TokeParser)' \
+                      'perl(IO::Socket)' \
+                      'perl(JSON)' \
+                      'perl(Log::Log4perl)' \
+                      'perl(LWP::Simple)' \
+                      'perl(LWP::UserAgent)' \
+                      'perl(MIME::Base64)' \
+                      'perl(Pod::Usage)' \
+                      'perl(Storable)' \
+                      'perl(Switch)' \
+                      'perl(Thread::Queue)' \
+                      'perl(threads)' \
+                      'perl(threads::shared)' \
+                      'perl(XML::FeedPP)' 
+```
+
