@@ -22,19 +22,6 @@ Gutta works with plugins, who recieves messages parsed by the Gutta::Abstraction
 
 The plugins are expected to return a conventional irc message and supports a multitude of options.
 
-### Available plugins:
-
-| Name  | Desc |
-
-------------- | -------------
-|  Gutta::Plugins::Auth | Support for running administrative commands etc |
-|  Gutta::Plugins::DO | Make bot run any irc command |
-|  Gutta::Plugins::Help | Provide help messages |
-|  Gutta::Plugins::Ibood | Does something with Ibood |
-|  Gutta::Plugins::Jira | Integrating with atlassian Jira |
-|  Gutta::Plugins::Karma | Managing karma |
-|  Gutta::Plugins::Nagios | Integrate with Nagios API for sending alarms |
-|  Gutta::Plugins::Slap | Slap with bot |
 
 ### Writing Plugins
 
