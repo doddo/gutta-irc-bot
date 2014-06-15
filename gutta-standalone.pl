@@ -18,13 +18,48 @@ use Gutta::AbstractionLayer;
 
 chdir(dirname(__FILE__));
 use Log::Log4perl;
+use Pod::Usage;
+
+
+=head1 NAME
+gutta-standalone.pl 
+=head1 SYNOPSIS
+$0 --server SERVER --nick NICK  [options] 
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<--server>
+
+The irc server to connect to
+
+=item B<--port>
+
+What port to use when connecting to server
+
+=item B<--nick>
+
+What nick to use
+
+=item B<--channel>
+
+What channel to join. Multiple channels can be specified by adding multiple --channel flags. Remember to escape the \# if your shell might interpret it.
+
+=back
+
+=head1 DESCRIPTION
+
+B<This program> is the gutta irc bot starter. Use it with the flags to connect to a server.
+
+=cut
 
 my $server;
 my $port = 6667;
 my $own_nick;
 my @channels;
-my $workers2start = 4;
 my $login;
+my $help = 0;
 
 Log::Log4perl->init("Gutta/Config/Log4perl.conf");
 my $log = Log::Log4perl->get_logger();
@@ -35,8 +70,16 @@ GetOptions (
           "port=i" => \$port,
           "nick=s" => \$own_nick,
        "channel=s" => \@channels,
- "workers2start=i" => \$workers2start,
-         "login=s" => \$login);
+            "help" => \$help,
+         "login=s" => \$login) 
+   or pod2usage(0);
+
+if ($help)
+{ 
+  print "KALLE\n";
+  pod2usage(1);
+  exit(0);
+}
 
 
 #
