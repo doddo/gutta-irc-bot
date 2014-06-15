@@ -1,4 +1,4 @@
-# Gutta the IRC bot
+# Gutta IRC bot
 
 Gutta is a modular IRC bot with powerful plugin interface and a small footprint.
 
@@ -102,6 +102,8 @@ This version of Gutta requires at least perl 5.10.
 
 ```bash
  sudo  yum  install   'perl(Crypt::PasswdMD5)'  \
+                       perl-parent \
+                       perl-DBD-sqlite \
                       'perl(Data::Dumper)'  \
                       'perl(DateTime)' \
                       'perl(DateTime::Format::Strptime)' \
