@@ -502,5 +502,20 @@ sub process_join_or_part
     return;
 }
 
+sub quit_irc
+{
+    my $self = shift;
+    # return the client QUIT msg to the server, which then disconnects you...
+    # 
+
+    # A quit message optional
+    my $quitmsg = shift || "https://github.com/doddo/gutta-irc-bot";
+    my $quitcmd = "QUIT :$quitmsg\r\n";
+
+    # here we put quitmsg into the responses queue.
+    $RESPONSES->enqueue($quitcmd);
+
+}
+
 
 1;

@@ -92,6 +92,7 @@ if ($help)
 
 $login||=$own_nick;
 
+
 $log->info("Now starting Gutta irc bot.");
 
 
@@ -109,6 +110,10 @@ my $sock = new IO::Socket::INET(PeerAddr => $server,
                                 Proto => 'tcp',
                                ) or
                                     die "Can't connect: $!\n";
+
+
+$SIG{INT} = \&clean_shutdown_stub;
+
 
 $log->info("Logging in to server");
 # Log on to the server.
@@ -214,4 +219,15 @@ sub heartbeat
         };
         warn $@ if $@; #TODO fix.
     }
+}
+
+# Trap Ctrl+C etc...
+sub clean_shutdown_stub {
+    my $signame = shift;
+    my $quitmsg = "Gone to have lunch";
+    $log->info("SHUTTING DOWN EVERYTHING FROM A SIG${signame}");
+    $gal->quit_irc($quitmsg);
+
+    sleep 2;
+    die;
 }
