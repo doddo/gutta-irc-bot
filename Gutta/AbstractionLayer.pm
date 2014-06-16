@@ -12,6 +12,9 @@ use Data::Dumper;
 use Switch;
 use Log::Log4perl;
 
+# The logger
+Log::Log4perl->init(Gutta::Constants::LOG4PERLCONF);
+my $log = Log::Log4perl->get_logger(__PACKAGE__);
 
 # Initialise the gutta runtime environment:
 #
@@ -42,8 +45,6 @@ This is to  the glue between the irc and the plugins
 
 =cut
 
-# The logger
-my $log = Log::Log4perl->get_logger(__PACKAGE__);
 
 # Getting the PLUGINS
 my @PLUGINS = plugins();

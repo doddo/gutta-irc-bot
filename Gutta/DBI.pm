@@ -3,6 +3,7 @@ package Gutta::DBI;
 use warnings;
 use strict;
 use DBI;
+use Gutta::Constants qw/DBFILE/;
 
 =head1 NAME
 
@@ -30,7 +31,7 @@ sub instance
 sub dbh
 {
     my $self = shift;
-    my $db = "Gutta/Data/gutta.db";
+    my $db = DBFILE;
     $self->{ dbh } = DBI->connect("dbi:SQLite:dbname=${db}","","")
          || die "Cannot connect to database: $DBI::errstr";
      return $self->{ dbh };

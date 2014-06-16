@@ -5,6 +5,7 @@ use warnings;
 use Data::Dumper;
 use Gutta::DBI;
 use Gutta::Parser;
+use Gutta::Constants;
 use Log::Log4perl;
 
 =head1 NAME
@@ -43,7 +44,7 @@ sub new
     my $class = shift;
     my $self  = bless { }, $class;
 
-    $self->{ dbfile } = "Gutta/Data/session.db";
+    $self->{ dbfile } = Gutta::Constants::SESSIONDBFILE;
 
     return $self;
 }

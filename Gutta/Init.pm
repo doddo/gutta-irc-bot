@@ -3,6 +3,7 @@ package Gutta::Init;
 use strict;
 use warnings;
 use Data::Dumper;
+use Gutta::Constants;
 use Gutta::DBI;
 use Log::Log4perl;
 
@@ -21,23 +22,26 @@ Initialize gutta runtime environment.
 
 =cut
 
-my $log = Log::Log4perl->get_logger(__PACKAGE__);
 
 sub guttainit
 {
+    my $log = Log::Log4perl->get_logger(__PACKAGE__);
+
     # This is the Gutta::Context:s db schema.
     # it gets recreated each and every time gutta is loaded.
+    $log->info('Initialising gutta runtime environment...');
 
-    my $db = "Gutta/Data/session.db";
+    my $db = Gutta::Constants::SESSIONDBFILE;
 
-    $log->info("Resetting the session db");
+    $log->info("Resetting the session db: '$db'");
+
 
     # remove the old data file and create a new one.
     # this one should be called before any plugins starts instantiating.
 
     if ( -e $db )
     {
-        $log->debug("removing old session db file...");
+        $log->debug("removing old session db file '$db'...");
         unlink ( $db ) or die $!;
     }
 

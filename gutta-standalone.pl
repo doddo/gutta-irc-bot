@@ -14,10 +14,14 @@ use IO::Socket;
 use Getopt::Long;
 use threads;
 use threads::shared;
+use Gutta::Constants;
+
+use Log::Log4perl;
+#Log::Log4perl->init(Gutta::Constants::LOG4PERLCONF);
+
 use Gutta::AbstractionLayer;
 
 chdir(dirname(__FILE__));
-use Log::Log4perl;
 use Pod::Usage;
 
 
@@ -61,7 +65,6 @@ my @channels;
 my $login;
 my $help = 0;
 
-Log::Log4perl->init("Gutta/Config/Log4perl.conf");
 my $log = Log::Log4perl->get_logger();
 
 
