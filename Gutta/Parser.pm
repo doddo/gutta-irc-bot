@@ -143,12 +143,13 @@ sub parse_353_nicks
     #               :[ "@" / "+" ] <nick> *( " " [ "@" / "+" ] <nick> )
     #         - "@" is used for secret channels, "*" for private
     #           channels, and "=" for others (public channels).
+    #
 
     m/^:(?<server>[^\s]++)\s  # get the server
                        353\s  # 353 is the nicks
       (?<own_nick>[^\s]++)\s  # own_nick
-     (?<channel>\#[^\s]++)\s  # channel
-        (?<chantype>[=*@])\s: # What type of channel is this?
+        (?<chantype>[=*@])\s  # What type of channel is this?
+     (?<channel>\#[^\s]++)\s: # channel name
                 (?<nicks>.+)$ # the nicks /x;
 
 
