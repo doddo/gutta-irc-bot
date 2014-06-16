@@ -62,8 +62,10 @@ sub guttainit
         CREATE TABLE channels (
                  nick TEXT NOT NULL,
               channel TEXT NOT NULL,
+                   op INTEGER DEFAULT 0,
+                voice INTEGER DEFAULT 0,
         CONSTRAINT one_nick_per_chan UNIQUE (nick, channel) ON CONFLICT REPLACE
-        );};
+        )};
 
     $dbh->disconnect;
 
