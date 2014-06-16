@@ -34,6 +34,8 @@ use constant       BASEDIR => catdir(GUTTADIR, '..');
 use constant       DATADIR => catdir(GUTTADIR, 'Data');
 use constant     PLUGINDIR => catdir(GUTTADIR, 'Plugins');
 use constant     CONFIGDIR => catdir(GUTTADIR, 'Config');
+
+# Files
 use constant        DBFILE => catdir(DATADIR, 'gutta.db');
 use constant SESSIONDBFILE => catfile(DATADIR, 'session.db');
 use constant  LOG4PERLCONF => catfile(CONFIGDIR, 'Log4perl.conf');
