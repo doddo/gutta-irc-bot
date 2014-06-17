@@ -368,6 +368,7 @@ sub process_msg
     {
         case   'PRIVMSG' { @irc_cmds = $self->process_privmsg($server, @payload) }
         case /JOIN|PART/ { @irc_cmds = $self->process_join_or_part($server, $msgtype, @payload) }
+        case       '353' { @irc_cmds = $self->process_own_channel_join(@payload) }
     }
 
     # if something returns IRC Commands, pass them through.
@@ -502,6 +503,22 @@ sub process_join_or_part
     return;
 }
 
+sub process_own_channel_join
+{
+    # Process the incoming messages from the parser. This is when the bot joins some channel.
+    my $self = shift;
+    my $server = shift;
+    my $channel = shift;
+    my $chantype = shift;
+    my @nicks = @_;
+    # return $+{server}, $+{channel}, $+{chantype}, @nicks;
+
+    map { print "THIS ONE IS IN $channel:  $_\n" } @nicks;
+    
+    return;
+
+}
+
 sub quit_irc
 {
     my $self = shift;
@@ -514,6 +531,8 @@ sub quit_irc
 
     # here we put quitmsg into the responses queue.
     $RESPONSES->enqueue($quitcmd);
+
+    return;
 
 }
 

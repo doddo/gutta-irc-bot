@@ -111,7 +111,7 @@ my $sock = new IO::Socket::INET(PeerAddr => $server,
                                ) or
                                     die "Can't connect: $!\n";
 
-
+# Handle what happens on sigINT
 $SIG{INT} = \&clean_shutdown_stub;
 
 
@@ -188,6 +188,7 @@ sub plugin_responses
     my $sock = shift;
     my $server = shift;
     $log->debug("*** starting plugin_responses thread");
+
     while (sleep(2))
     {
         eval {
@@ -196,6 +197,10 @@ sub plugin_responses
             {
                 $log->info(sprintf" < %s", $irc_cmd);
                 print $sock $irc_cmd; #TODO rate limiting "human typing speed"
+
+                # check that the quit msg've been sent to the server. If that's the case
+                # then exit the plugin_responses thread.
+                last if $irc_cmd =~ /^QUIT/;
             }
         };
         warn $@ if $@; #TODO fix.
@@ -227,7 +232,5 @@ sub clean_shutdown_stub {
     my $quitmsg = "Gone to have lunch";
     $log->info("SHUTTING DOWN EVERYTHING FROM A SIG${signame}");
     $gal->quit_irc($quitmsg);
-
     sleep 2;
-    die;
 }
