@@ -11,6 +11,13 @@ run
 ./gutta-standalone.pl --server irc.example.com --nick gutta --channel \#farmen --channel \#channel2
 ```
 
+Or - if you want SSL, simply add the ssl flag:
+
+```bash
+./gutta-standalone.pl --server irc.example.com --nick gutta --channel \#linux  --port 6697 --ssl
+
+```
+
 then (in the future)
 
 interface with gutta with guttacli (or through plugins)
@@ -69,6 +76,7 @@ sub _commands
 
     }
 }
+
 1;
 
 ```
@@ -113,6 +121,7 @@ This version of Gutta requires at least perl 5.10.
                       'perl(HTML::Strip)' \
                       'perl(HTML::TokeParser)' \
                       'perl(IO::Socket)' \
+                      'perl(IO::Socket::SSL)' \
                       'perl(JSON)' \
                       'perl(Log::Log4perl)' \
                       'perl(LWP::Simple)' \
