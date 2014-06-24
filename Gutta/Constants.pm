@@ -28,6 +28,9 @@ This is how gutta can find its datadirs etc
 # The logger
 my $log = Log::Log4perl->get_logger(__PACKAGE__);
 
+# Global info such as version
+use constant       VERSION => 0.1; # TODO Fix this
+
 # Directories
 use constant      GUTTADIR => dirname(abs_path(__FILE__));
 use constant       BASEDIR => catdir(GUTTADIR, '..');
@@ -36,12 +39,12 @@ use constant     PLUGINDIR => catdir(GUTTADIR, 'Plugins');
 use constant     CONFIGDIR => catdir(GUTTADIR, 'Config');
 
 # Files
-use constant        DBFILE => catdir(DATADIR, 'gutta.db');
+use constant        DBFILE => catfile(DATADIR, 'gutta.db');
 use constant SESSIONDBFILE => catfile(DATADIR, 'session.db');
 use constant  LOG4PERLCONF => catfile(CONFIGDIR, 'Log4perl.conf');
 
 # Want to export directly, thats OK
-our @EXPORT_OK = qw/GUTTADIR BASEDIR DATADIR PLUGINDIR CONFIGDIR 
-                                            DBFILE SESSIONDBFILE LOG4PERLCONF/;
+our @EXPORT_OK = qw/VERSION GUTTADIR BASEDIR DATADIR PLUGINDIR 
+                     CONFIGDIR DBFILE SESSIONDBFILE LOG4PERLCONF/;
 
 1;

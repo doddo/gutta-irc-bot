@@ -366,9 +366,10 @@ sub process_msg
 
     switch ($msgtype)
     {
-        case   'PRIVMSG' { @irc_cmds = $self->process_privmsg($server, @payload) }
+          case 'PRIVMSG' { @irc_cmds = $self->process_privmsg($server, @payload) }
         case /JOIN|PART/ { @irc_cmds = $self->process_join_or_part($server, $msgtype, @payload) }
-        case       '353' { @irc_cmds = $self->process_own_channel_join(@payload) }
+              case '353' { @irc_cmds = $self->process_own_channel_join($server, @payload) }
+             case 'QUIT' { @irc_cmds = $self->process_quit($server, @payload) }
     }
 
     # if something returns IRC Commands, pass them through.
@@ -494,12 +495,37 @@ sub process_join_or_part
     my $self = shift;
     my $server = shift;
     my $what = shift;
-    my $who = shift;
+    my $nick = shift;
+    my $mask = shift;
+    my $channel = shift;
 
-    $log->debug("I just found out that $who $what:ed");
+    $log->debug("I just found out that $nick $what:ed $channel on $server.");
 
     # TODO STUB
+    if ($what eq 'JOIN')
+    {
+        $self->{context}->_process_join($server,$nick,$mask,$channel);
+    } elsif ($what eq 'PART') {
+        $self->{context}->_process_part($server,$nick,$mask,$channel);
+    }
 
+    # TODO: Notify the plugins about this
+
+    return;
+}
+
+sub process_quit
+{
+    my $self = shift;
+    my $server = shift;
+    my $nick = shift;
+    my $mask = shift;
+
+    $log->debug("I just found out that $nick whith hostmask $mask QUIT:ed");
+
+    $self->{context}->_process_quit($server,$nick);
+
+    # TODO: Notify the plugins about this
     return;
 }
 
@@ -511,9 +537,12 @@ sub process_own_channel_join
     my $channel = shift;
     my $chantype = shift;
     my @nicks = @_;
-    # return $+{server}, $+{channel}, $+{chantype}, @nicks;
 
-    map { print "THIS ONE IS IN $channel:  $_\n" } @nicks;
+    # Add the nicks found to the context so plugins may use them.
+    $self->{context}->_set_nicks_for_channel($server, $channel, @nicks);
+
+#    print Dumper($self->{context}->get_nicks_from_channel($server, $channel));
+
     
     return;
 
@@ -535,6 +564,5 @@ sub quit_irc
     return;
 
 }
-
 
 1;

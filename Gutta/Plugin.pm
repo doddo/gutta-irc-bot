@@ -12,7 +12,6 @@ my $log;
 sub new
 {
     my $class = shift;
-    my $dt =  DateTime->new( year=>(2000+int(rand(10))));
     my $self = bless {
                 data => {},
             datafile => undef,
