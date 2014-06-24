@@ -71,7 +71,7 @@ sub parse
         }
     }
 
-    $log->debug("found nothing for $msg_to_parse ");
+    $log->trace("found nothing for $msg_to_parse ");
 
     return 0;
 
@@ -130,6 +130,16 @@ sub parse_privmsg
     return $+{msg}, $+{nick}, $+{mask}, $+{target};
 }
 
+sub parse_ctcp_ping
+{
+    # > :petter_!~petter@iXXX PRIVMSG guttaz :PING 1403608761 4177
+    #  A ping is just a PRIVMSG but it contains the "PING" and then the timestamp
+    # And something else besides.
+    # 
+    my $self = shift;
+    # TODO
+}
+
 sub parse_353_nicks
 {
 
@@ -186,7 +196,7 @@ sub parse_userquit
                   QUIT\s: # this is how we know hser did QUIT
               (?<msg>.+)$ # rest of line would be the QUITMSG /x;
 
-    return $+{msg}, $+{nick}, $+{mask};
+    return $+{nick}, $+{mask}, $+{msg};
 
 }
 
@@ -227,7 +237,7 @@ sub parse_470_forwarded_to_other_channel
     
     # Looks like this:
     # :barjavel.freenode.net 470 gutta #linux ##linux :Forwarding to another channel
-    # :gutta!~gutta@c80-216-80-238.bredband.comhem.se JOIN ##linux
+    # :gutta!~gutta@credband.comhem.se JOIN ##linux
     #
     #
 
