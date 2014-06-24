@@ -11,6 +11,7 @@ use warnings;
 use Data::Dumper;
 use File::Basename;
 use IO::Socket;
+use IO::Socket::SSL;
 use Getopt::Long;
 use threads;
 use threads::shared;
@@ -38,9 +39,9 @@ $0 --server SERVER --nick NICK  [options]
 
 The irc server to connect to
 
-=item B<--port>
+=item B<--ssl>
 
-What port to use when connecting to server
+Connect via SSL
 
 =item B<--nick>
 
@@ -58,28 +59,34 @@ B<This program> is the gutta irc bot starter. Use it with the flags to connect t
 
 =cut
 
+# prog variables
+my $log = Log::Log4perl->get_logger();
+my $sock;
+my $logged_in=0;
+
+# Config params
 my $server;
 my $port = 6667;
 my $own_nick;
 my @channels;
 my $login;
 my $help = 0;
-
-my $log = Log::Log4perl->get_logger();
+my $ssl = 0;
 
 
 GetOptions (
-        "server=s" => \$server,
-          "port=i" => \$port,
-          "nick=s" => \$own_nick,
-       "channel=s" => \@channels,
-            "help" => \$help,
-         "login=s" => \$login) 
+        'server=s' => \$server,
+          'port=i' => \$port,
+          'nick=s' => \$own_nick,
+       'channel=s' => \@channels,
+             'ssl' => \$ssl,
+            'help' => \$help,
+         'login=s' => \$login) 
    or pod2usage(0);
 
 if ($help)
 { 
-  print "KALLE\n";
+  print "PRINTING THE HELP\n";
   pod2usage(1);
   exit(0);
 }
@@ -105,11 +112,27 @@ my $gal = Gutta::AbstractionLayer->new(parse_response => 1,
 $log->info("Connecting to server");
 
 
-my $sock = new IO::Socket::INET(PeerAddr => $server,
-                             PeerPort => $port,
-                                Proto => 'tcp',
-                               ) or
-                                    die "Can't connect: $!\n";
+if ($ssl)
+{
+
+    $sock = new IO::Socket::SSL(PeerAddr => $server,
+                                   PeerPort => $port,
+                                      Proto => 'tcp') 
+
+                    or  die "Can't connect: $!\n";
+
+
+
+} else {
+
+    $sock = new IO::Socket::INET(PeerAddr => $server,
+                                    PeerPort => $port,
+                                       Proto => 'tcp') 
+
+                    or  die "Can't connect: $!\n";
+
+}
+
 
 # Handle what happens on sigINT
 $SIG{INT} = \&clean_shutdown_stub;
@@ -129,12 +152,23 @@ while (my $message = <$sock>)
     # Check the numerical responses from the server.
     if ($message =~ /004/) {
         # We are now logged in.
+        $logged_in++;
         last;
     }
     elsif ($message =~ /433/) {
         die "Nickname is already in use.";
     }
 }
+
+
+### Here comes a check to see if we really still are logged in.
+unless ($logged_in)
+{
+    $log->error("Failed to log into the server.");
+    exit 9;
+}
+
+
 
 
 $log->info("*** logged in !!");
@@ -226,8 +260,9 @@ sub heartbeat
     }
 }
 
-# Trap Ctrl+C etc...
-sub clean_shutdown_stub {
+sub clean_shutdown_stub 
+{
+    # Trap Ctrl+C etc...
     my $signame = shift;
     my $quitmsg = "Gone to have lunch";
     $log->info("SHUTTING DOWN EVERYTHING FROM A SIG${signame}");
