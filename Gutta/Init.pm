@@ -52,23 +52,34 @@ sub guttainit
 
 
     $dbh->do($_) foreach q{
-        CREATE TABLE pluginmeta (
-                 plugin_name TEXT NOT NULL,
-                       value TEXT NOT NULL,
-                  what_it_is TEXT NOT NULL,
-        CONSTRAINT plugin_c UNIQUE (plugin_name, value, what_it_is) ON CONFLICT REPLACE
-
+         CREATE TABLE pluginmeta (
+          plugin_name TEXT NOT NULL,
+                value TEXT NOT NULL,
+           what_it_is TEXT NOT NULL,
+           CONSTRAINT plugin_c UNIQUE (plugin_name, value, what_it_is) 
+                   ON CONFLICT REPLACE
         )}, q{
-        CREATE TABLE channels (
+         CREATE TABLE nicks (
+                 nick TEXT PRIMARY KEY,
+                modes TEXT,
+                 mask TEXT
+        )}, q{
+         CREATE TABLE channels (
                  nick TEXT NOT NULL,
               channel TEXT NOT NULL,
                    op INTEGER DEFAULT 0,
                 voice INTEGER DEFAULT 0,
-        CONSTRAINT one_nick_per_chan UNIQUE (nick, channel) ON CONFLICT REPLACE
+              FOREIGN KEY(nick) REFERENCES nicks(nick),
+           CONSTRAINT one_nick_per_chan UNIQUE (nick, channel) ON CONFLICT REPLACE
+        )}, q{
+         CREATE TABLE server_info (
+               server TEXT NOT NULL,
+                  key TEXT NOT NULL,
+                value TEXT NOT NULL,
+          PRIMARY KEY (server, key) ON CONFLICT REPLACE
         )};
 
     $dbh->disconnect;
-
 
 
     # Gutta::Context going to have this session db which contains things that is good for all the plugins
