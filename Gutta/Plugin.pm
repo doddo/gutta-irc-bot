@@ -125,7 +125,7 @@ sub heartbeat
 
     if (($nowt - $self->{heartbeat_act_ts}) >= $self->{heartbeat_act_s})
     {
-        $log->debug(sprintf "♥ because %i >= %i", $nowt - $self->{heartbeat_act_ts}, $self->{heartbeat_act_s});
+        $log->trace(sprintf "♥ because %i >= %i", $nowt - $self->{heartbeat_act_ts}, $self->{heartbeat_act_s});
         $self->{heartbeat_act_ts} = $nowt;
         $self->_heartbeat_act;
     }

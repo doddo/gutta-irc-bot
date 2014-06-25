@@ -366,6 +366,7 @@ sub process_msg
 
     switch ($msgtype)
     {
+             case 'PING' { push(@irc_cmds, "PONG $payload[0]\r\n") }
           case 'PRIVMSG' { @irc_cmds = $self->process_privmsg($server, @payload) }
         case /JOIN|PART/ { @irc_cmds = $self->process_join_or_part($server, $msgtype, @payload) }
               case '353' { @irc_cmds = $self->process_own_channel_join($server, @payload) }
@@ -501,7 +502,6 @@ sub process_join_or_part
 
     $log->debug("I just found out that $nick $what:ed $channel on $server.");
 
-    # TODO STUB
     if ($what eq 'JOIN')
     {
         $self->{context}->_process_join($server,$nick,$mask,$channel);
