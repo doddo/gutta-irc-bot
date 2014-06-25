@@ -148,6 +148,7 @@ print $sock "USER $login 8 * :Gutta Standalone\r\n";
 # Read lines from the server until it tells us we have connected.
 while (my $message = <$sock>)
 {
+
     $log->info(sprintf " > %s", $message);
     # Check the numerical responses from the server.
     if ($message =~ /004/) {
@@ -158,8 +159,24 @@ while (my $message = <$sock>)
     elsif ($message =~ /433/) {
         die "Nickname is already in use.";
     }
+    
+    # Server could send pings here already or other msgs
+    # which needs to be answered, so putting this here.
+    my @irc_cmds = $gal->process_msg($server,$message);
+    foreach my $irc_cmd (@irc_cmds)
+    {
+        $log->info(sprintf " < %s", $irc_cmd);
+        printf $sock "%s", $irc_cmd;
+    }
+
 }
 
+### Here comes a check to see if we really are connected
+unless ($sock->connected())
+{
+    $log->error("Not connected to server ${server}");
+    exit 8;
+}
 
 ### Here comes a check to see if we really still are logged in.
 unless ($logged_in)
@@ -198,18 +215,11 @@ while (my $message = <$sock>)
     # display what the server says.
     $log->info(" > $message\n");
 
-    if ($message =~ /^PING (.*)$/i)
+    my @irc_cmds = $gal->process_msg($server,$message);
+    foreach my $irc_cmd (@irc_cmds)
     {
-        # We must respond to PINGs to avoid being disconnected.
-        $log->info(" < PONG $1");
-        print $sock "PONG $1\r\n";
-    } else {
-        my @irc_cmds = $gal->process_msg($server,$message);
-        foreach my $irc_cmd (@irc_cmds)
-        {
-            $log->info(sprintf " < %s", $irc_cmd);
-            printf $sock "%s", $irc_cmd;
-        }
+        $log->info(sprintf " < %s", $irc_cmd);
+        printf $sock "%s", $irc_cmd;
     }
 }
 
@@ -234,7 +244,11 @@ sub plugin_responses
 
                 # check that the quit msg've been sent to the server. If that's the case
                 # then exit the plugin_responses thread.
-                last if $irc_cmd =~ /^QUIT/;
+                if ( $irc_cmd =~ /^QUIT/) 
+                {
+                    shutdown($sock, 1); # stop writing to socket
+                    last;               # and exit loop
+                }
             }
         };
         warn $@ if $@; #TODO fix.
@@ -251,7 +265,7 @@ sub heartbeat
 
     # first initialise the queues.
     $gal->init_heartbeat_queues($server);
-    while (sleep(2))
+    while (sleep(1))
     {
         eval {
             $gal->heartbeat();
@@ -267,5 +281,14 @@ sub clean_shutdown_stub
     my $quitmsg = "Gone to have lunch";
     $log->info("SHUTTING DOWN EVERYTHING FROM A SIG${signame}");
     $gal->quit_irc($quitmsg);
-    sleep 2;
+    while ($sock->connected() and (my $i++ < 3))
+    {
+        sleep 1;
+    }
+    # cleaning up the last of the stuff
+    shutdown($sock, 2) if $sock;
+    close($sock) if $sock;
+    
+    # And dying
+    exit();
 }

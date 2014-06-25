@@ -38,6 +38,7 @@ sub new
          'PRIVMSG' => sub { $self->parse_privmsg(@_) },
              '353' => sub { $self->parse_353_nicks(@_) },
              '366' => sub { $self->parse_366_end_of_names(@_) },
+            'PING' => sub { $self->parse_ping(@_) },
             'JOIN' => sub { $self->parse_joined_channel(@_) },
             'PART' => sub { $self->parse_parted_channel(@_) },
             'QUIT' => sub { $self->parse_userquit(@_) },
@@ -130,14 +131,15 @@ sub parse_privmsg
     return $+{msg}, $+{nick}, $+{mask}, $+{target};
 }
 
-sub parse_ctcp_ping
+sub parse_ping
 {
-    # > :petter_!~petter@iXXX PRIVMSG guttaz :PING 1403608761 4177
-    #  A ping is just a PRIVMSG but it contains the "PING" and then the timestamp
-    # And something else besides.
-    # 
+    # The ping requests need a PONG
     my $self = shift;
-    # TODO
+    $_ = shift;
+
+    m/^PING (.*)$/;
+
+    return $1;
 }
 
 sub parse_353_nicks
