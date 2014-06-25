@@ -55,7 +55,7 @@ sub handler
         }; 
         if (!$reply)
         {
-            $reply = "Unrecougnized CTCP command";
+            $reply = "Unrecognized CTCP command";
         }
         # What to reply to the sender
         my $response = "NOTICE $nick :\001$command: $reply\001";
