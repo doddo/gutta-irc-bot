@@ -109,7 +109,7 @@ my $gal = Gutta::AbstractionLayer->new(parse_response => 1,
 
 
 
-$log->info("Connecting to server");
+$log->info("Connecting to server $server...");
 
 
 if ($ssl)
@@ -138,7 +138,7 @@ if ($ssl)
 $SIG{INT} = \&clean_shutdown_stub;
 
 
-$log->info("Logging in to server");
+$log->info("Logging in to server \"$server\"");
 # Log on to the server.
 $log->info(" < NICK $own_nick");
 print $sock "NICK $own_nick\r\n";
@@ -251,7 +251,7 @@ sub plugin_responses
                 }
             }
         };
-        warn $@ if $@; #TODO fix.
+        $log->error($@) if $@; #TODO fix.
     }
 }
 
@@ -270,7 +270,7 @@ sub heartbeat
         eval {
             $gal->heartbeat();
         };
-        warn $@ if $@; #TODO fix.
+        $log->error($@) if $@; #TODO fix.
     }
 }
 
