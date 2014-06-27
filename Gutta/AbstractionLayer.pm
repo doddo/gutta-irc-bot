@@ -5,6 +5,7 @@ use warnings;
 use threads;
 use Thread::Queue;
 use Gutta::DBI;
+use Gutta::Users;
 use Gutta::Parser;
 use Gutta::Init qw/guttainit/;
 use Gutta::Context;
@@ -22,7 +23,8 @@ guttainit();
 
 # Instantiate all the plugins.
 use Module::Pluggable search_path => "Gutta::Plugins",
-                      instantiate => 'new';
+                        require => 1;
+#                      instantiate => 'new';
 
 
 =head1 NAME
@@ -47,9 +49,9 @@ This is to  the glue between the irc and the plugins
 
 
 # Getting the PLUGINS
-my @PLUGINS = plugins();
-my %PLUGINS = map { ref $_ => $_ } @PLUGINS;
-my $PLUGINS = \%PLUGINS;
+my @PLUGINS ; #= plugins();
+my %PLUGINS ; #= map { ref $_ => $_ } @PLUGINS;
+my $PLUGINS ; # = \%PLUGINS;
 
 # The plugins tasks queues
 #
@@ -70,20 +72,6 @@ my $RESPONSES = Thread::Queue->new();
 my %TASKS;
 
 
-#
-# Create an own Thread::Queue for the plugins which wants to run in a
-# thread of their own. This is to enable sorting out messages only for
-# them, and putting them into that Queue.
-# This does not look very nice and TODO will be fixed in next release.
-while (my ($plugin_ref, $plugin) = each %PLUGINS)
-{
-    if ($plugin->{want_own_thread})
-    {
-        $TASKS{$plugin_ref} = Thread::Queue->new();
-    } else {
-        $TASKS{$plugin_ref} = $TASKQUEUE;
-    }
-}
 
 sub new
 {
@@ -100,23 +88,64 @@ sub new
         cmdprefix => qr/^(gutta[,:.]\s+|[!])/,
     }, $class;
 
-    # load commands and triggers from plugins
-    $self->{triggers} = $self->_load_triggers();
-    $self->{commands} = $self->_load_commands();
-
     # setting commandprefix based on own_nick
     if ($params{own_nick})
     {
         # TODO: this is ugly; fix.
         $self->{cmdprefix} = qr/(${params{own_nick}}[,:.]\s+|[!])/;
     }
+    
+    # initialise the plugins.
+    $self->__initialise_plugins();
 
-    # Fire up the workers
+
+    # initialise the threads.
+    $self->__initialise_threads();
+
+    # start the workers
     $self->__start_workers();
-
 
     return $self;
 }
+
+
+sub __initialise_plugins
+{
+    # Phase 1: loading the pluggins and getting some valuable nuggets of 
+    # information from them.
+    my $self = shift;
+
+    # Instansiate the plugins
+    @PLUGINS = map { $_->new() } plugins();
+    %PLUGINS = map { ref $_ => $_ } @PLUGINS;
+    $PLUGINS = \%PLUGINS;
+
+    # load commands and triggers from plugins
+    $self->{triggers} = $self->_load_triggers();
+    $self->{commands} = $self->_load_commands();
+
+}
+
+sub __initialise_threads
+{
+    # Phase 2:Create an own Thread::Queue for the plugins which wants to 
+    # run in a thread of their own. This is to enable sorting out messages 
+    # only for them, and putting them into that Queue.
+    #
+    # This does not look very nice and TODO will be fixed in next release.
+    my $self = shift;
+    while (my ($plugin_ref, $plugin) = each %PLUGINS)
+    {
+        if ($plugin->{want_own_thread})
+        {
+            $TASKS{$plugin_ref} = Thread::Queue->new();
+        } else {
+            $TASKS{$plugin_ref} = $TASKQUEUE;
+        }
+    }
+}
+
+
 
 sub __start_workers
 {
@@ -163,6 +192,7 @@ sub _load_triggers
 
             # Loading the context with these triggers now.
             $self->{context}->set_plugincontext($plugin_key, 'triggers', keys %{$t});
+
         } else {
             $log->debug(sprintf "loaded 0 triggers for %s\n", $plugin_key);
         }
@@ -266,7 +296,10 @@ sub plugin_worker
             $log->debug(sprintf "thread #%-2i got command %s %s for queue %s", $no, $command_or_trigger, $plugin_ref, $queue);
             eval {
                 # Start the plugin "$plugin_ref";s  command. pass along all variables to it.
-                push @responses, $PLUGINS{$plugin_ref}->command($command_or_trigger,$server,$msg,$nick,$mask,$target,$rest_of_msg);
+                if ($PLUGINS{$plugin_ref} and $PLUGINS{$plugin_ref}->can('command'))
+                {
+                    push @responses, $PLUGINS{$plugin_ref}->command($command_or_trigger,$server,$msg,$nick,$mask,$target,$rest_of_msg);
+                }
             };
             warn ($@) if $@; # TODO fix.
         } elsif ($tasktype eq 'trigger'){
@@ -281,10 +314,16 @@ sub plugin_worker
             #
             $log->trace(sprintf "thread #%-2i Got heartbeat for %-25s for queue %s", $no, $plugin_ref, $queue);
             eval {
-                $PLUGINS{$plugin_ref}->heartbeat();
-                push @responses, $PLUGINS{$plugin_ref}->heartbeat_res($server);
-                # OK the heartbeat have been run, so it can be put back into
-                # the queue
+                if ($PLUGINS{$plugin_ref}->can('heartbeat'))
+                {
+                    $PLUGINS{$plugin_ref}->heartbeat();
+                    if ($PLUGINS{$plugin_ref}->can('heartbeat_res'))
+                    {
+                        push @responses, $PLUGINS{$plugin_ref}->heartbeat_res($server);
+                        # OK the heartbeat have been run, so it can be put back into
+                        # the queue
+                    }
+                }
             };
             warn ($@) if $@; # TODO fix.
             $HEARTBEAT->enqueue($inc_msg);
@@ -315,9 +354,12 @@ sub init_heartbeat_queues
     # Define job for all the plugins.
     foreach my $plugin_ref (keys %PLUGINS)
     {
-        $log->debug("enqueing $plugin_ref for $server");
-        # the message looks like this:
-        $HEARTBEAT->enqueue(['heartbeat', $plugin_ref, '', $server]);
+        if ($PLUGINS{$plugin_ref}->can('heartbeat'))
+        {
+            $log->debug("enqueing $plugin_ref for $server");
+            # the message looks like this:
+            $HEARTBEAT->enqueue(['heartbeat', $plugin_ref, '', $server]);
+        }
     }
 }
 
@@ -430,29 +472,38 @@ sub process_privmsg
             # prefix from the message.
             ($command, @rest_of_msg) = split(/\s/,substr($msg,$offset));
         }
-        
-        # get all commands for all plugins.
-        while (my ($plugin_ref, $commands) = each %{$self->{commands}})
+
+        # SPECIAL HANDLER FOR BOT ADMINISTRATIONS COMMAND.
+        if ($command eq 'guttadm')
         {
-            # has plugin $plugin_ref a defined command which match?
-            if (exists $$commands{$command})
+            # Managing the plugin needs to be handled outside of the plugins and directly
+            # here, in the guttadm functions.
+            @responses = $self->_guttadm($msg,$nick,$mask,$target, join ' ', @rest_of_msg);
+
+        } else {
+            
+            # get all commands for all plugins.
+            while (my ($plugin_ref, $commands) = each %{$self->{commands}})
             {
-
-                $log->debug("BINGO FOR $plugin_ref @ $command");
-                # the msg with commandprefix stripped from it.
-                my $rest_of_msg = join ' ', @rest_of_msg;
-
-                # removing any crap from the msg.
-                chomp($rest_of_msg);
-                # OK now we know what to do, what plugin to do it with, and the
-                # message to pass to the plugin etc. At this point it gets added
-                # to the queue.
-                $log->debug(sprintf 'enqueuing command %s for %s in queue %s', $command, $plugin_ref, $TASKS{$plugin_ref});
-                $TASKS{$plugin_ref}->enqueue(['command', $plugin_ref, $command,$server,$msg,$nick,$mask,$target,$rest_of_msg]);
+                # has plugin $plugin_ref a defined command which match?
+                if (exists $$commands{$command})
+                {
+    
+                    $log->debug("BINGO FOR $plugin_ref @ $command");
+                    # the msg with commandprefix stripped from it.
+                    my $rest_of_msg = join ' ', @rest_of_msg;
+    
+                    # removing any crap from the msg.
+                    chomp($rest_of_msg);
+                    # OK now we know what to do, what plugin to do it with, and the
+                    # message to pass to the plugin etc. At this point it gets added
+                    # to the queue.
+                    $log->debug(sprintf 'enqueuing command %s for %s in queue %s', $command, $plugin_ref, $TASKS{$plugin_ref});
+                    $TASKS{$plugin_ref}->enqueue(['command', $plugin_ref, $command,$server,$msg,$nick,$mask,$target,$rest_of_msg]);
+                }
             }
         }
     }
-    
     #
     # Process Triggers
     #
@@ -565,4 +616,28 @@ sub quit_irc
 
 }
 
+sub _guttadm
+{
+    # THis is a very 
+    my $self = shift;
+    my $msg = shift;
+    my $nick = shift;
+    my $mask = shift;
+    my $target = shift;
+    my $rest_of_msg = shift;
+    my @responses;
+
+    # Check if user is logged in and is admin (Gutta::Users)
+
+    # Check if there's a rest of message
+
+    # Check if there's the $rest_of_msg 
+
+    # parse rest of msgs:
+
+
+
+
+    return @responses;
+}
 1;
