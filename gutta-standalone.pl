@@ -72,16 +72,18 @@ my @channels;
 my $login;
 my $help = 0;
 my $ssl = 0;
+my $connect_timeout = 10;
 
 
 GetOptions (
-        'server=s' => \$server,
-          'port=i' => \$port,
-          'nick=s' => \$own_nick,
-       'channel=s' => \@channels,
-             'ssl' => \$ssl,
-            'help' => \$help,
-         'login=s' => \$login) 
+          'server=s' => \$server,
+            'port=i' => \$port,
+ 'connect-timeout=i' => \$connect_timeout,
+            'nick=s' => \$own_nick,
+         'channel=s' => \@channels,
+               'ssl' => \$ssl,
+              'help' => \$help,
+           'login=s' => \$login) 
    or pod2usage(0);
 
 if ($help)
@@ -116,8 +118,9 @@ if ($ssl)
 {
 
     $sock = new IO::Socket::SSL(PeerAddr => $server,
-                                   PeerPort => $port,
-                                      Proto => 'tcp') 
+                                PeerPort => $port,
+                                 Timeout => $connect_timeout,
+                                   Proto => 'tcp') 
 
                     or  die "Can't connect: $!\n";
 
@@ -126,8 +129,9 @@ if ($ssl)
 } else {
 
     $sock = new IO::Socket::INET(PeerAddr => $server,
-                                    PeerPort => $port,
-                                       Proto => 'tcp') 
+                                 PeerPort => $port,
+                                  Timeout => $connect_timeout,
+                                    Proto => 'tcp') 
 
                     or  die "Can't connect: $!\n";
 
