@@ -23,7 +23,7 @@ guttainit();
 
 # Instantiate all the plugins.
 use Module::Pluggable search_path => "Gutta::Plugins",
-                        require => 1;
+                          require => 1;
 #                      instantiate => 'new';
 
 
@@ -96,13 +96,15 @@ sub new
     }
     
     # initialise the plugins.
+    $log->info("loading the plugins...");
     $self->__initialise_plugins();
 
-
     # initialise the threads.
+    $log->info("starting the plugin threads...");
     $self->__initialise_threads();
 
     # start the workers
+    $log->info("starting the plugin workers...");
     $self->__start_workers();
 
     return $self;
@@ -288,45 +290,68 @@ sub plugin_worker
     while (my $inc_msg = $queue->dequeue())
     {
         my @responses;
-        my ($tasktype, $plugin_ref, $command_or_trigger, $server, $msg, $nick, $mask,
+        my ($timestamp, $tasktype, $plugin_ref, $command_or_trigger, $server, $msg, $nick, $mask,
            $target, $rest_of_msg) =  @{$inc_msg};
         $log->trace("worker #$no got a new msg of type $tasktype to process for $plugin_ref from queue $queue");
         if ($tasktype eq 'command')
         {
-            $log->debug(sprintf "thread #%-2i got command %s %s for queue %s", $no, $command_or_trigger, $plugin_ref, $queue);
-            eval {
-                # Start the plugin "$plugin_ref";s  command. pass along all variables to it.
-                if ($PLUGINS{$plugin_ref} and $PLUGINS{$plugin_ref}->can('command'))
-                {
-                    push @responses, $PLUGINS{$plugin_ref}->command($command_or_trigger,$server,$msg,$nick,$mask,$target,$rest_of_msg);
-                }
-            };
-            warn ($@) if $@; # TODO fix.
+            # check to see whether the plugin does exist.
+            unless ($PLUGINS{$plugin_ref})
+            {
+                $log->warn("ignoring $tasktype for $plugin_ref; plugin is not there");
+            } else {
+
+                $log->debug(sprintf "thread #%-2i got command %s %s for queue %s", $no, $command_or_trigger, $plugin_ref, $queue);
+                eval {
+                    # Start the plugin "$plugin_ref";s  command. pass along all variables to it.
+                    if ($PLUGINS{$plugin_ref} and $PLUGINS{$plugin_ref}->can('command'))
+                    {
+                        push @responses, $PLUGINS{$plugin_ref}->command($command_or_trigger,
+                                                    $server, $msg, $nick, $mask, $target, $rest_of_msg, $timestamp);
+                    }
+                };
+                $log->error($@) if $@; # TODO fix.
+            }
         } elsif ($tasktype eq 'trigger'){
             $log->debug(sprintf "thread #%-2i got trigger %s %s for queue %s", $no, $command_or_trigger, $plugin_ref, $queue);
             eval {
                 # Start the plugin "$plugin_ref";s triggers. pass along all variables to it.
-                push @responses, $PLUGINS{$plugin_ref}->trigger($command_or_trigger,$server,$msg,$nick,$mask,$target,$rest_of_msg);
+                push @responses, $PLUGINS{$plugin_ref}->trigger($command_or_trigger, 
+                                                $server, $msg, $nick, $mask, $target, $rest_of_msg, $timestamp);
             };
-            warn ($@) if $@; # TODO fix.
+            $log->error($@) if $@; # TODO fix.
         } elsif ($tasktype eq 'heartbeat') {
             # put a heartbeat into the plugin
             #
-            $log->trace(sprintf "thread #%-2i Got heartbeat for %-25s for queue %s", $no, $plugin_ref, $queue);
-            eval {
-                if ($PLUGINS{$plugin_ref}->can('heartbeat'))
-                {
-                    $PLUGINS{$plugin_ref}->heartbeat();
-                    if ($PLUGINS{$plugin_ref}->can('heartbeat_res'))
+            # check to see whether the plugin does exist.
+            unless ($PLUGINS{$plugin_ref})
+            {
+                $log->info("discarding heartbeat message for $plugin_ref; plugin is not there");
+            } else {
+
+                $log->trace(sprintf "thread #%-2i Got heartbeat for %-25s for queue %s", $no, $plugin_ref, $queue);
+                eval {
+                    if ($PLUGINS{$plugin_ref}->can('heartbeat'))
                     {
-                        push @responses, $PLUGINS{$plugin_ref}->heartbeat_res($server);
-                        # OK the heartbeat have been run, so it can be put back into
-                        # the queue
+                        $PLUGINS{$plugin_ref}->heartbeat();
+                        if ($PLUGINS{$plugin_ref}->can('heartbeat_res'))
+                        {
+                            push @responses, $PLUGINS{$plugin_ref}->heartbeat_res($server);
+                            # OK the heartbeat have been run, so it can be put back into
+                            # the queue
+                        }
                     }
-                }
-            };
-            warn ($@) if $@; # TODO fix.
-            $HEARTBEAT->enqueue($inc_msg);
+                };
+                warn ($@) if $@; # TODO fix.
+                $HEARTBEAT->enqueue($inc_msg);
+            }
+
+        } elsif ($tasktype eq 'disable' or $tasktype eq 'reload')  {
+            # Disable a plugin.
+            $log->info("deleting ${plugin_ref} from worker ${no}.");
+            delete $PLUGINS{$plugin_ref};
+            my $i = 0;
+            map { delete $PLUGINS[$i++] if ref $_ eq $plugin_ref } @PLUGINS;
         }
         
         # here we prepare the response standardised.
@@ -358,7 +383,7 @@ sub init_heartbeat_queues
         {
             $log->debug("enqueing $plugin_ref for $server");
             # the message looks like this:
-            $HEARTBEAT->enqueue(['heartbeat', $plugin_ref, '', $server]);
+            $HEARTBEAT->enqueue([time, 'heartbeat', $plugin_ref, '', $server]);
         }
     }
 }
@@ -376,9 +401,9 @@ sub heartbeat
     foreach my $inc_msg ($HEARTBEAT->dequeue_nb(scalar @PLUGINS))
     {
         # make sure to sort message into correct queue by checking for
-        # what plugin the message was intended. That is the 2:nd valie in the
+        # what plugin the message was intended. That is the 3:rd valie in the
         # array.
-        my $plugin_ref = (@{$inc_msg})[1];
+        my $plugin_ref = (@{$inc_msg})[2];
          
         # Grab all messages from HEARTBEAT queue. And put them back into the TASKQUEUE
         $log->trace(sprintf "passing heartbeat to %s in queue %s", $plugin_ref, $TASKS{$plugin_ref});
@@ -478,7 +503,7 @@ sub process_privmsg
         {
             # Managing the plugin needs to be handled outside of the plugins and directly
             # here, in the guttadm functions.
-            @responses = $self->_guttadm($msg,$nick,$mask,$target, join ' ', @rest_of_msg);
+            @responses = $self->_guttadm($msg, $nick, $mask, $target, join ' ', @rest_of_msg);
 
         } else {
             
@@ -498,8 +523,10 @@ sub process_privmsg
                     # OK now we know what to do, what plugin to do it with, and the
                     # message to pass to the plugin etc. At this point it gets added
                     # to the queue.
-                    $log->debug(sprintf 'enqueuing command %s for %s in queue %s', $command, $plugin_ref, $TASKS{$plugin_ref});
-                    $TASKS{$plugin_ref}->enqueue(['command', $plugin_ref, $command,$server,$msg,$nick,$mask,$target,$rest_of_msg]);
+                    $log->debug(sprintf 'enqueuing command %s for %s in queue %s', 
+                                                     $command,  $plugin_ref, $TASKS{$plugin_ref});
+                    $TASKS{$plugin_ref}->enqueue([ time, 'command', $plugin_ref, $command, $server, 
+                                                          $msg, $nick, $mask, $target, $rest_of_msg ]);
                 }
             }
         }
@@ -522,7 +549,8 @@ sub process_privmsg
                 $log->debug(printf 'trigger "%s" matched "%s" for plugin %s.', $regex_trigger, $&, $plugin_ref);
                 # OK now we know what to do, what plugin to do it with, and the
                 # message to pass to plugin etc. Add it to the queue of tasks to do
-                $TASKS{$plugin_ref}->enqueue(['trigger', $plugin_ref, $regex_trigger,$server,$msg,$nick,$mask,$target,$&]);
+                $TASKS{$plugin_ref}->enqueue([ time, 'trigger', $plugin_ref, $regex_trigger, $server, 
+                                                      $msg, $nick, $mask, $target, $&  ]);
             }
         }
     }
