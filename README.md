@@ -14,8 +14,7 @@ run
 Or - if you want SSL, simply add the ssl flag:
 
 ```bash
-./gutta-standalone.pl --server irc.example.com --nick gutta --channel \#linux  --port 6697 --ssl
-
+./gutta-standalone.pl --ssl --server irc.example.com --nick gutta --channel \#linux  --port 6697
 ```
 
 then (in the future)
