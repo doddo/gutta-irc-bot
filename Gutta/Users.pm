@@ -6,6 +6,11 @@ use warnings;
 use DateTime;
 use Data::Dumper;
 use Crypt::PasswdMD5;
+use Log::Log4perl;
+
+# The logger
+Log::Log4perl->init(Gutta::Constants::LOG4PERLCONF);
+my $log = Log::Log4perl->get_logger(__PACKAGE__);
 
 
 =pod
@@ -187,6 +192,24 @@ sub get_users
     return $userdata;
 }
 
+sub is_admin
+{
+    # "boolean" returns whether the user is an admin
+    my $self = shift;
+    my $nick = shift;
+
+    my $nick_reginfo = $self->get_user($nick);
+
+    if ($$nick_reginfo{'admin'})
+    {
+        $log->debug("nick $nick is an admin");
+        return 1;
+    } else {
+        $log->debug("nick $nick is not an admin");
+        return undef;
+    }
+}
+
 sub has_session
 {
     # "booelan" returns whether the user has a session or not.
@@ -201,13 +224,27 @@ sub has_session
 
     if ($smask eq $mask and $session_expire >= time)
     {
-        warn ("user is  logged in");
+        $log->debug("user $nick  is  logged in");
         return $session_expire;  # true
     }
     else
     {
-        warn ("user was not logged in: $session_expire");
+        $log->debug("user $nick was not logged in: $session_expire");
         return undef; # False
+    }
+}
+
+sub is_admin_with_session
+{
+    # "boolean" returns whether the user is a logged in admin
+    my $self = shift;
+    my $nick = shift;
+
+    if ($self->has_session($nick) && $self->is_admin($nick))
+    {
+        return 1
+    } else {
+        return undef;
     }
 }
 

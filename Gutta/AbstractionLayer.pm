@@ -81,6 +81,7 @@ sub new
                db => Gutta::DBI->instance(),
            parser => Gutta::Parser->new(),
           context => Gutta::Context->new(),
+            users => Gutta::Users->new(),
    parse_response => $params{parse_response},
          own_nick => $params{own_nick}||'gutta',
           workers => [],
@@ -656,8 +657,18 @@ sub _guttadm
     my @responses;
 
     # Check if user is logged in and is admin (Gutta::Users)
+    unless ($self->{ users }->is_admin_with_session($nick))
+    {
+       return "msg $target $nick operation not permitted.";
+    }
 
-    # Check if there's a rest of message
+    unless ($rest_of_msg)
+    {
+        return "msg $target $nick need subcmd (help not implemented yet)";
+    }
+
+    my ($subcmd, @opts ) = split(' ', $rest_of_msg);
+    
 
     # Check if there's the $rest_of_msg 
 
