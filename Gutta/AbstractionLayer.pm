@@ -16,10 +16,6 @@ use Log::Log4perl;
 Log::Log4perl->init(Gutta::Constants::LOG4PERLCONF);
 my $log = Log::Log4perl->get_logger(__PACKAGE__);
 
-# Initialise the gutta runtime environment:
-#
-guttainit();
-
 # Instantiate all the plugins.
 use Module::Pluggable search_path => "Gutta::Plugins",
                           require => 1;
@@ -79,7 +75,6 @@ sub new
     my $self = bless {
                db => Gutta::DBI->instance(),
            parser => Gutta::Parser->new(),
-          context => Gutta::Context->new(),
             users => Gutta::Users->new(),
    parse_response => $params{parse_response},
          own_nick => $params{own_nick}||'gutta',
@@ -87,6 +82,11 @@ sub new
        heartbeats => [],
         cmdprefix => qr/^(gutta[,:.]\s+|[!])/,
     }, $class;
+
+    # Initialise the gutta runtime environment:
+    #
+    guttainit();
+    $self->{context} = Gutta::Context->new();
 
     # setting commandprefix based on own_nick
     if ($params{own_nick})
