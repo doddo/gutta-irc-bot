@@ -73,9 +73,9 @@ sub _triggers
     my $self = shift;
 
     return {
-        qr/([a-z0-9_@.ÅÄÖåäö]+?)(\+\+|--)/i => sub { $self->give_karma(@_) },
-                                qr/^srank/  => sub { $self->srank(@_) },
-                                 qr/^rank/  => sub { $self->rank(@_) },
+           qr/([a-z0-9_@.ÅÄÖåäö]+?)(\+\+|--)/i => sub { $self->give_karma(@_) },
+                                   qr/^srank/  => sub { $self->srank(@_) },
+                                    qr/^rank/  => sub { $self->rank(@_) },
     };
 }
 
@@ -105,10 +105,20 @@ sub srank
     # get the db handle.
     my $dbh = $self->dbh();
 
+    my $target_item;
+
+    $log->debug("examining srank for \"$match\"...");
+
     # fetch what item to target from msg
     # msg looks like ~ this "srank foo"
-    $msg =~ m/^srank\s+(\S+)\b/;
-    my $target_item = ($1) ?  "%${1}%" : '%%';
+    if ($msg =~ m/^srank\s+(\S+)\b/)
+    {
+        $target_item = ($1) ?  "%${1}%" : '%%';
+    } else {
+        $target_item = ($match) ?  "%${match}%" : '%%';
+    }
+
+    $log->debug("srank calling for \"$target_item\"...");
 
     # the array of respnoses to pass back to the caller
     # this is an array of IRC commands.
