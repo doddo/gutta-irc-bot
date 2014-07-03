@@ -1,6 +1,6 @@
 *.data
 plugindemo.pl
-*test*.pl
+*test.pl
 *.swp
 *.db
 *.swo
