@@ -1,4 +1,3 @@
-#!/usr/bin/perl
 package Gutta::AbstractionLayer;
 use strict;
 use warnings;
