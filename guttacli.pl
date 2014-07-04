@@ -42,6 +42,12 @@ my @r = $d->process_privmsg (
     $target,
 );
 
+foreach (@r)
+{
+    $log->info(sprintf" < %s", $_);
+}
+ 
+
 for (my $i=0;$i<5;$i++)
 {
     foreach ($d->plugin_res(999))

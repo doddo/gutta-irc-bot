@@ -35,8 +35,10 @@ This is  the Gutta abstraction layer.
 
 This is to  the glue between the irc and the plugins
 
-* to improve multitasking if some server is slow (by introducing threads and a message queue)
-* a layer between the server connected entity and the plugins, to translate the plugins messages as appropriate for the server connected client using them,
+* Initialises the "gutta runtime environment
+* Instansiates the plugins and put them in plugin worker threads.
+* In theoury could put anything "in front of" the abstraction layer, so it is
+easy to implement in other irc clients than gutta-standalone.pl
 * a dispatcher.
 
 
@@ -50,16 +52,16 @@ my $PLUGINS ; # = \%PLUGINS;
 
 # The plugins tasks queues
 #
-# This is the "default" task queue, for plugins which does not want a
-# thread of their own.
+# This is the "default" task queue, for plugins which does not want a thread of 
+# their own.
 my $TASKQUEUE = Thread::Queue->new();
 #
-# This is the queue for storing HEARTBEATs when they are not inside
-# of any of the plugins TASKS queues.
+# This is the queue for storing HEARTBEATs when they are not inside of any of 
+# the plugins TASKS queues.
 my $HEARTBEAT = Thread::Queue->new();
 #
-# This is the output. The plugins generate value by refining the input
-# Here's where this input is stored for sending through to the IRC server
+# This is the output. The plugins generate value by refining the input. 
+# Here's where this input is stored for sending through to the IRC server.
 # It holds IRC commands sent from the plugins.
 my $RESPONSES = Thread::Queue->new();
 
@@ -130,9 +132,9 @@ sub __initialise_plugins
 
 sub __initialise_threads
 {
-    # Phase 2:Create an own Thread::Queue for the plugins which wants to 
-    # run in a thread of their own. This is to enable sorting out messages 
-    # only for them, and putting them into that Queue.
+    # Phase 2:Create an own Thread::Queue for the plugins which wants to run
+    # in a thread of their own. This is to enable sorting out messages only for
+    # them, and putting them into that Queue.
     #
     # This does not look very nice and TODO will be fixed in next release.
     my $self = shift;
@@ -163,7 +165,7 @@ sub __start_workers
     {
         if ($PLUGINS{$plugin_ref}->{want_own_thread})
         {
-            $log->debug("starteing own thread for $plugin_ref with queue $TASKS{$plugin_ref}");
+            $log->debug("starting own thread for $plugin_ref with  $TASKS{$plugin_ref}");
             $self->start_worker(++$i,$TASKS{$plugin_ref});
         }
     }
@@ -301,7 +303,8 @@ sub plugin_worker
                 $log->warn("ignoring $tasktype for $plugin_ref; plugin is not there");
             } else {
 
-                $log->debug(sprintf "thread #%-2i got command %s %s for queue %s", $no, $command_or_trigger, $plugin_ref, $queue);
+                $log->debug(sprintf "thread #%-2i got command %s %s for queue %s", 
+                                            $no, $command_or_trigger, $plugin_ref, $queue);
                 eval {
                     # Start the plugin "$plugin_ref";s  command. pass along all variables to it.
                     if ($PLUGINS{$plugin_ref} and $PLUGINS{$plugin_ref}->can('command'))
@@ -313,11 +316,12 @@ sub plugin_worker
                 $log->error($@) if $@; # TODO fix.
             }
         } elsif ($tasktype eq 'trigger'){
-            $log->debug(sprintf "thread #%-2i got trigger %s %s for queue %s", $no, $command_or_trigger, $plugin_ref, $queue);
+            $log->debug(sprintf "thread #%-2i got trigger %s %s for queue %s", 
+                                            $no, $command_or_trigger, $plugin_ref, $queue);
             eval {
                 # Start the plugin "$plugin_ref";s triggers. pass along all variables to it.
                 push @responses, $PLUGINS{$plugin_ref}->trigger($command_or_trigger, 
-                                                $server, $msg, $nick, $mask, $target, $rest_of_msg, $timestamp);
+                                            $server, $msg, $nick, $mask, $target, $rest_of_msg, $timestamp);
             };
             $log->error($@) if $@; # TODO fix.
         } elsif ($tasktype eq 'heartbeat') {
@@ -499,11 +503,11 @@ sub process_privmsg
         }
 
         # SPECIAL HANDLER FOR BOT ADMINISTRATIONS COMMAND.
-        if ($command eq 'guttadm')
+        if ($command eq 'pluginctl')
         {
             # Managing the plugin needs to be handled outside of the plugins and directly
-            # here, in the guttadm functions.
-            @responses = $self->_guttadm($msg, $nick, $mask, $target, join ' ', @rest_of_msg);
+            # here, in the pluginctl functions.
+            @responses = $self->_pluginctl($msg, $nick, $mask, $target, join ' ', @rest_of_msg);
 
         } else {
             
@@ -644,7 +648,7 @@ sub quit_irc
 
 }
 
-sub _guttadm
+sub _pluginctl
 {
     # THis is a very 
     my $self = shift;
@@ -655,22 +659,29 @@ sub _guttadm
     my $rest_of_msg = shift;
     my @responses;
 
+    $log->info("Got Admincmd from ${nick}. hen vill $rest_of_msg");
     # Check if user is logged in and is admin (Gutta::Users)
     unless ($self->{ users }->is_admin_with_session($nick))
     {
        return "msg $target $nick operation not permitted.";
     }
 
+    # Check if there's the $rest_of_msg 
     unless ($rest_of_msg)
     {
         return "msg $target $nick need subcmd (help not implemented yet)";
     }
 
+
     my ($subcmd, @opts ) = split(' ', $rest_of_msg);
     
-
-    # Check if there's the $rest_of_msg 
-
+    switch($subcmd)
+    {
+        case    'list'  { @responses = map {"msg ${target} ${nick}: " . $_ } keys %PLUGINS}
+        case 'disable'  { push(@responses, "msg $target $nick Want to disable a plugin?") }
+        case 'enable'   {}
+        case 'reload'   {}
+    }
     # parse rest of msgs:
 
 

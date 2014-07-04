@@ -9,7 +9,7 @@ use Log::Log4perl;
 
 require Exporter;
 our @ISA = qw(Exporter);
-our @EXPORT_OK = qw(guttainit);
+our @EXPORT_OK = qw(guttainit guttacleanup);
 
 
 =head1 NAME
@@ -33,7 +33,7 @@ sub guttainit
 
     my $db = Gutta::Constants::SESSIONDBFILE;
 
-    $log->info("Resetting the session db: '$db'");
+    $log->info("Creating the session db: '$db'");
 
 
     # remove the old data file and create a new one.
@@ -41,8 +41,7 @@ sub guttainit
 
     if ( -e $db )
     {
-        $log->debug("removing old session db file '$db'...");
-        unlink ( $db ) or die $!;
+        $log->warning("session db file '$db' exists already...");
     }
 
 
@@ -52,19 +51,19 @@ sub guttainit
 
 
     $dbh->do($_) foreach q{
-         CREATE TABLE pluginmeta (
+         CREATE TABLE IF NOT EXISTS pluginmeta (
           plugin_name TEXT NOT NULL,
                 value TEXT NOT NULL,
            what_it_is TEXT NOT NULL,
            CONSTRAINT plugin_c UNIQUE (plugin_name, value, what_it_is) 
                    ON CONFLICT REPLACE
         )}, q{
-         CREATE TABLE nicks (
+         CREATE TABLE IF NOT EXISTS nicks (
                  nick TEXT PRIMARY KEY,
                 modes TEXT,
                  mask TEXT
         )}, q{
-         CREATE TABLE channels (
+         CREATE TABLE IF NOT EXISTS channels (
                  nick TEXT NOT NULL,
               channel TEXT NOT NULL,
                    op INTEGER DEFAULT 0,
@@ -72,7 +71,7 @@ sub guttainit
               FOREIGN KEY(nick) REFERENCES nicks(nick),
            CONSTRAINT one_nick_per_chan UNIQUE (nick, channel) ON CONFLICT REPLACE
         )}, q{
-         CREATE TABLE server_info (
+         CREATE TABLE IF NOT EXISTS server_info (
                server TEXT NOT NULL,
                   key TEXT NOT NULL,
                 value TEXT NOT NULL,
@@ -89,5 +88,22 @@ sub guttainit
 
     # Other initalisation may go here.
 }
+
+sub guttacleanup
+{
+    my $log = Log::Log4perl->get_logger(__PACKAGE__);
+    # Clean up after the proces've been killed...
+    my $db = Gutta::Constants::SESSIONDBFILE;
+
+    if ( -e $db )
+    {
+        $log->info("Removing session db file '$db'.");
+        unlink ( $db ) or die $!;
+    }
+
+
+}
+
+
 
 1;
