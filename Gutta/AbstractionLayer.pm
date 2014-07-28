@@ -644,6 +644,9 @@ sub quit_irc
     # here we put quitmsg into the responses queue.
     $RESPONSES->enqueue($quitcmd);
 
+    # Here we clean up the session-db file.
+    # guttacleanup;
+
     return;
 
 }

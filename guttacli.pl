@@ -1,15 +1,9 @@
 #!/usr/bin/perl
-# == WHAT
-# All around bot "Gutta".
+# Guttacli stub.
+# 
+# The guttacli can (in the future) interface with running gutta session through
+# An admin socket.
 #
-# == WHO
-# Based on "All around bot" by Jeroen Van den Bossche, 2012
-# Fork By PETTER H 2014
-#
-# == INSTALL
-# Save the whole thing under ~/.irssi/scripts/ and then run irssi, and /load gutta.pl
-# OR
-# Save it in ~/.irssi/scripts/autorun and (re)start Irssi
 
 use strict;
 use warnings;
