@@ -37,19 +37,60 @@ Monitor has a lot of subsections, such like "config", "hostgroup", "host", "host
 
 Used like this:
 
- '!monitor config [ --username NAGIOSUSERNAME ] [ --password PASSWORD  ] [ --nagios-server HOSTNAME ] [ --prefix PREFIX ]
+ !monitor config [ --username NAME ] [ --password PASSWD  ] [ --nagios-server HOSTNAME ] [ --prefix PREFIX ] [ --summary-interval MINUTES ]
+
+=over 8
+
+=item B<--username>
+
+username to use for logging into nagios API
+
+=item B<--password>
+
+password to use when connecting to nagios API
+
+=item B<--check-interval>
+
+What is the interval to use for polling nagios
+
+=item B<--prefix>
+
+Prefix nagios status messages with a optional prefix.
+
+=item B<--summary-interval>
+
+If set, will will send a summary with node and service status.
+
+
+=back
 
 for example say this:
 
- '!monitor config --username monitor --password monitor --nagios-server 192.168.60.182' --prefix ALARM
+ !monitor config --username monitor --password monitor --nagios-server 192.168.60.182' --prefix ALARM
 
 to configure a connection to monitor at 192.168.60.182 using username monitor and password monitor. All alarms originating will be prefixed with "ALARM".
 
 =head2 hostgroup
 
-!monitor hostgroup unix-servers --irc-server .* --to-channel #test123123
+ !monitor HOSTGROUP --irc-server REGEX --to-channel CHANNEL
+
+For example:
+
+ !monitor hostgroup unix-servers --irc-server ^ --to-channel #test123123
 
 To add op5 irc monitoring for all servers in the unix-servers hostgroups on all servers, and send messages Crit, Warns and Clears to channel #test123123
+
+=over 8
+
+=item B<--irc-server>
+
+Regex to match with connected to IRC server, to determine whether a message should be sent.
+
+=item B<--to-channel>
+
+For which channel do we send these messages to?
+
+=back
 
 =head2 hostgroupstatus
 
@@ -123,7 +164,8 @@ sub _initialise
     # Anyways, this is configurable, but will default to ~ 6.7 min.
     #  you do it witn !monitor config --check-interval 500
     #  (for 500 seconds)
-    $self->{heartbeat_act_s} = $self->get_config('check-interval')||406;   #  act on heartbeats ~ every 6.7 min.
+    #  act on heartbeats ~ every 6.7 min.
+    $self->{heartbeat_act_s} = $self->get_config('check-interval')||406; 
 }
 
 sub _commands
@@ -263,6 +305,7 @@ sub _monitor_hostgroup
     my $server;
     my $channel;
 
+
     my $ret = GetOptionsFromArray(\@args,
         'irc-server=s' => \$server,
         'to-channel=s' => \$channel,
@@ -293,11 +336,12 @@ sub _monitor_config
     my %config;
 
     my $ret = GetOptionsFromArray(\@args, \%config,
-           'username=s',
-           'password=s',
-     'check-interval=s',
-             'prefix=s',
-      'nagios-server=s',
+             'username|user=s',
+                  'password=s',
+   'check-interval|interval=s',
+          'summary-interval=i',
+                    'prefix=s',
+      'nagios-server|server=s',
     ) or return "invalid options supplied:";
 
     while(my ($key, $value) = each %config)
@@ -386,6 +430,16 @@ sub _monitor_hoststatus
     # Check if data is up to date (or call _monitor_runconce)
     # Return data for host if specified,
     # or an executive summary.
+    # 
+    # Since monitor_runonce may be called upon request or on regular basis,
+    #  there is no point in  doing it again if it was run very recently.
+    my $nowt = localtime;
+
+    if ($nowt - $self->{lastrun} >= 37)
+    {
+        $self->_monitor_runonce;
+        $self->{lastrun} = $nowt;
+    }
 
 
     return "here will be status for each host...";
@@ -393,15 +447,31 @@ sub _monitor_hoststatus
 
 sub _monitor_status
 {
+    # Get the executive summary for the services.
     my $self = shift;
 
     # TODO:
-    # Check if data is up to date (or call _monitor_runconce)
+    # Check if data is up to date (by caling _monitor_runconce) which has a
+    # Built-in check.
+    $self->_monitor_runonce;
+
     # Return data for hostgroup if specified,
     # or an executive summary.
 
+    my @responses;
+    
+    # Get the DB handle...
+    my $dbh = $self->dbh();
 
-    return "here will be status for each hostgroup...";
+    # Check for "stale" servers...
+
+    # Check and compare services
+
+    # Compare with configured "filters"
+
+    # Return the executive status summary.
+    return @responses;
+
 }
 
 sub _monitor_hostgroupstatus
@@ -412,6 +482,8 @@ sub _monitor_hostgroupstatus
     my $target = shift;
 
     my @responses;
+
+    $log->info("calling monitor hostgroupstatus from channel $target");
 
     # first check is to see if the request came from a channel.
     if (substr($target, 0, 1) eq '#')
@@ -688,6 +760,7 @@ sub _monitor_runonce
     return;
 }
 
+
 sub _api_get_host
 {
     my $self = shift;
@@ -927,9 +1000,17 @@ sub _heartbeat_act
     #
     #
 
-
     my $self = shift;
-    $self->_monitor_runonce;
+    my $nowt = localtime;
+
+    # 
+    # Since monitor_runonce may be called upon request, there is no point in
+    # doing it again if it was run very recently.
+    if ($nowt - $self->{lastrun} >= 37)
+    {
+        $self->_monitor_runonce;
+        $self->{lastrun} = $nowt;
+    }
 }
 
 sub heartbeat_res
