@@ -12,6 +12,7 @@ use Data::Dumper;
 use File::Basename;
 use IO::Socket;
 use IO::Socket::SSL;
+use IO::Socket::UNIX;
 use Getopt::Long;
 use threads;
 use threads::shared;
@@ -73,17 +74,19 @@ my $login;
 my $help = 0;
 my $ssl = 0;
 my $connect_timeout = 10;
+my $unix_socket_path;
 
 
 GetOptions (
-          'server=s' => \$server,
-            'port=i' => \$port,
- 'connect-timeout=i' => \$connect_timeout,
-            'nick=s' => \$own_nick,
-         'channel=s' => \@channels,
-               'ssl' => \$ssl,
-              'help' => \$help,
-           'login=s' => \$login) 
+           'server=s' => \$server,
+             'port=i' => \$port,
+  'connect-timeout=i' => \$connect_timeout,
+             'nick=s' => \$own_nick,
+          'channel=s' => \@channels,
+                'ssl' => \$ssl,
+               'help' => \$help,
+            'login=s' => \$login,
+ 'unix-socket-path=s' => \$unix_socket_path)
    or pod2usage(0);
 
 if ($help)
@@ -136,6 +139,8 @@ if ($ssl)
                     or  die "Can't connect: $!\n";
 
 }
+
+
 
 
 # Handle what happens on sigINT
@@ -202,8 +207,16 @@ $log->info("*** staring heartneat thread");
 async(\&heartbeat, $server)->detach;
 
 
+# Start a socket so that gutta may listen to guttacli.
+if ($unix_socket_path)
+{
+    $log->info("** listening to socket $unix_socket_path");
+    async(\&socketlsnr, $unix_socket_path)->detach; 
+}
 
-print "*** Logged in to server, joining channels\n";
+
+
+$log->info("*** Logged in to server, joining channels");
 # Join the channels.
 foreach my $channel (@channels)
 {
@@ -277,6 +290,36 @@ sub heartbeat
         $log->error($@) if $@; #TODO fix.
     }
 }
+
+sub socketlsnr
+{
+    # This is the socket listner. it allows for 3rd part to interact with
+    # running irc service through unix domain socket.
+    # Guttacli uses this to command gutta through the shell command line.
+    my $unix_socket_path = shift;
+    my $sock = shift;
+
+    my $server = IO::Socket::UNIX->new(
+        Type => SOCK_STREAM(),
+        Local => $unix_socket_path,
+        Listen => 1,
+    );
+
+    while (my $conn = $server->accept()) 
+    {
+        while (my $message = <$conn>)
+        {
+            my @irc_cmds = $gal->process_msg('FIXME',$message);
+            $log->info("got $message from unix socket");
+            foreach my $irc_cmd (@irc_cmds)
+            {
+                $log->info(sprintf " < %s", $irc_cmd);
+                printf $sock "%s", $irc_cmd;
+            }
+        }
+    }
+}
+
 
 sub clean_shutdown_stub 
 {
