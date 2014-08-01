@@ -255,7 +255,19 @@ sub _setup_shema
                           GROUP BY host_name
                     ) c
                 ON c.host_name = b.host_name
-       });
+       }, qq{
+    CREATE VIEW IF NOT EXISTS monitor_fullservicereport AS
+          SELECT  a.hostgroup,
+                  a.host_name,
+                  b.service,
+                  c.irc_server,
+                  c.channel
+             FROM monitor_hosts_from_hostgroup a
+       INNER JOIN monitor_servicedetail b
+               ON a.host_name = b.host_name
+        LEFT JOIN monitor_hostgroups c
+               ON a.hostgroup = c.hostgroup
+        });
 
     return @queries;
 
@@ -534,6 +546,8 @@ sub _monitor_hostgroupdetails
     # from which the request originated and send back an executive summary.
     my $self = shift;
     my $target = shift;
+
+    $log->debug("Hostgroupdetails called from $target...");
 
     my $nagios_server = $self->get_config('nagios-server');
 
@@ -889,10 +903,12 @@ sub __get_request
 
     my $password = $self->get_config('password');
     my $username = $self->get_config('username');
+    my $verify_hostname = $self->get_config('verify_hostname')||0;
     my $nagios_server = $self->get_config('nagios-server');
     my $apiurl = sprintf 'https://%s/api%s?format=json', $nagios_server, $path;
 
-    my $ua = LWP::UserAgent->new;
+    my $ua = LWP::UserAgent->new();
+    $ua->ssl_opts ( verify_hostname => $verify_hostname );
     my $req = HTTP::Request->new(GET => $apiurl);
 
     if ($username && $password)
