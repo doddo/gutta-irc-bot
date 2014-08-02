@@ -256,7 +256,7 @@ sub _setup_shema
                     ) c
                 ON c.host_name = b.host_name
        }, qq{
-    CREATE VIEW IF NOT EXISTS monitor_fullservicereport AS
+    CREATE VIEW IF NOT EXISTS monitor_fullservice AS
           SELECT  a.hostgroup,
                   a.host_name,
                   b.service,
@@ -551,6 +551,10 @@ sub _monitor_hostgroupdetails
     my $nagios_server = $self->get_config('nagios-server');
 
     my @responses;
+    # The stale timestamp is to make sure that the time stamp fetched from the
+    # Database is no older than one hour.
+    # You don't want old stuf in there.
+    my $stale_timestamp = time - 3600;
 
     # first check is to see if the request came from a channel.
     if (substr($target, 0, 1) eq '#')
@@ -558,25 +562,39 @@ sub _monitor_hostgroupdetails
         # first char was a #, so target is a channel.
 
         #
+
+        $log->debug("Checking for status for $target after $stale_timestamp");
+
+
         my $dbh = $self->dbh();
 
         my $sth = $dbh->prepare(qq{
-                              SELECT host_name,
-                                     state,
-                                     services_with_error
-                                FROM monitor_hostgroupstatus a
-                          INNER JOIN monitor_hostgroups b
-                                  ON a.hostgroup = b.hostgroup
-                               WHERE channel = ?
-                            GROUP BY host_name
+                     SELECT a.host_name, 
+                            a.state, 
+                            services_with_error 
+                       FROM monitor_hostgroupstatus a 
+                 INNER JOIN monitor_hoststatus b 
+                         ON a.host_name = b.host_name 
+                 INNER JOIN monitor_hostgroups c 
+                         ON a.hostgroup = c.hostgroup
+                      WHERE b.timestamp > ?
+                        AND c.channel = ?
+                   GROUP BY a.host_name 
         });
 
-        $sth->execute($target);
+        $sth->execute($stale_timestamp, $target);
         
         while(my ($host_name, $state, $services_with_error) = $sth->fetchrow_array())
         {
-            push @responses, sprintf '%-8s is: %-7s (It has %2i services with error). http://%s/monitor/index.php/extinfo/details/host/%s',
+            $services_with_error||=0; # avoid warning if undef
+            if ($services_with_error == 0 and $state == 0) 
+            {
+                push @responses, sprintf '%-8s is: %-7s with no service errors.',
+                   $host_name, $self->__translate_return_codes($state, 'host');
+            } else {
+                push @responses, sprintf '%-8s is: %-7s (It has %2i services with error). http://%s/monitor/index.php/extinfo/details/host/%s',
                    $host_name, $self->__translate_return_codes($state, 'host'), $services_with_error, $nagios_server, $host_name;
+            }
         }
 
     } else {
@@ -585,6 +603,10 @@ sub _monitor_hostgroupdetails
 
         push @responses ,'hostgroupdetails works best if run from a channel with nagios hostgroup associated with it.';
     }
+
+   
+
+# TODO: SELECT hostgroup,host_name,service,irc_server,channel FROM monitor_fullservice WHERE channel = '#test123213';
 
     return @responses;
 }
