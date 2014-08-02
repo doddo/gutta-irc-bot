@@ -447,7 +447,7 @@ sub _monitor_hoststatus
     #  there is no point in  doing it again if it was run very recently.
     my $nowt = localtime;
 
-    if ($nowt - $self->{lastrun} >= 37)
+    if ($self->{lastrun} && $nowt - $self->{lastrun} >= 37)
     {
         $self->_monitor_runonce;
         $self->{lastrun} = $nowt;
@@ -506,7 +506,6 @@ sub _monitor_hostgroupstatus
         my $dbh = $self->dbh();
         my $nagios_server = $self->get_config('nagios-server');
 
-#https://192.168.60.182/monitor/index.php/listview?q=[hosts]\%20in\%20\%22unix-servers\%22
         my $sth = $dbh->prepare(qq{
                               select a.hostgroup,
                     count(host_name) total_hosts,
@@ -1022,7 +1021,7 @@ sub _heartbeat_act
     # 
     # Since monitor_runonce may be called upon request, there is no point in
     # doing it again if it was run very recently.
-    if ($nowt - $self->{lastrun} >= 37)
+    if ($self->{lastrun} && $nowt - $self->{lastrun} >= 37)
     {
         $self->_monitor_runonce;
         $self->{lastrun} = $nowt;
