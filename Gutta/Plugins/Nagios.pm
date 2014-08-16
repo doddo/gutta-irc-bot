@@ -299,7 +299,7 @@ sub monitor
         case             'dump' { @irc_cmds = $self->_monitor_login(@values) }
         case          'runonce' { @irc_cmds = $self->_monitor_runonce(@values) }
         case           'filter' { @irc_cmds = $self->_monitor_filter(@values) }
-        case       'hoststatus' { @irc_cmds = $self->_monitor_hoststatus(@values) }
+        case /host(status|details?)/ { @irc_cmds = $self->_monitor_hoststatus(@values) }
         case  'hostgroupstatus' { @irc_cmds = $self->_monitor_hostgroupstatus($target, @values) }
         case 'hostgroupdetails' { @irc_cmds = $self->_monitor_hostgroupdetails($target, @values) }
         case            'satus' { @irc_cmds = $self->_monitor_status(@values) }
@@ -437,24 +437,94 @@ sub _unmonitor_hostgroup
 sub _monitor_hoststatus
 {
     my $self = shift;
+    my $host_to_chk = shift;
+    my $dbh;
+    my $stale_timestamp = time - 3600;
+    my @responses;
+    my $passes_filter = 0;
 
-    # TODO:
-    # Check if data is up to date (or call _monitor_runconce)
-    # Return data for host if specified,
-    # or an executive summary.
-    # 
-    # Since monitor_runonce may be called upon request or on regular basis,
-    #  there is no point in  doing it again if it was run very recently.
-    my $nowt = localtime;
+    my $ok_checks = 0;
+    my $filtered = 0;
+    my $services = 0;
+    my $errors = 0;
 
-    if ($self->{lastrun} && $nowt - $self->{lastrun} >= 37)
+
+    $log->debug("checking host status for node $host_to_chk.");
+
+    if ($host_to_chk)
     {
-        $self->_monitor_runonce;
-        $self->{lastrun} = $nowt;
+
+        # TODO:
+        # Check if data is up to date (or call _monitor_runconce)
+        # Return data for host if specified,
+        # or an executive summary.
+        # 
+        # Since monitor_runonce may be called upon request or on regular basis,
+        #  there is no point in  doing it again if it was run very recently.
+        my $nowt = localtime;
+
+        if ($self->{lastrun} && $nowt - $self->{lastrun} >= 37)
+        {
+            $self->_monitor_runonce;
+            $self->{lastrun} = $nowt;
+        }
+
+        $dbh = $self->dbh();
+        my $sth = $dbh->prepare(qq{
+            SELECT service, 
+                   state, 
+                   plugin_output 
+              FROM monitor_servicedetail
+             WHERE timestamp > ?
+               AND host_name = ?
+          ORDER BY state
+        });
+
+        $sth->execute($stale_timestamp,$host_to_chk);
+
+        while(my ($service, $state, $plugin_output) = $sth->fetchrow_array())
+        {
+          
+            $log->debug ("checking service $service ...");
+
+            $services++;
+            if ($state == 0)
+            {
+                $ok_checks++;
+            } else {
+                $errors++;
+                unless ($self->__passes_filter($service))
+                {
+                    $filtered++;
+                    $log->debug ("its filtered...");
+                } else {
+                    push @responses, sprintf '%-8s service %-7s is %s: %s.', $host_to_chk, 
+                          $service, $self->__translate_return_codes($state, 'service'), $plugin_output;
+                }
+            }
+        }
+
+    } else {
+
+        return 'missing host argument. (what host do you wish to see)';
     }
 
+    if (scalar @responses == 0)
+    {
 
-    return "here will be status for each host...";
+        return 'no service details found for host.';
+
+    } elsif (scalar @responses > 5) {
+        @responses = (sprintf 'thre are %i services on this host have errors!!!', scalar @responses);
+    }
+    
+    # Add the executive summary    
+    push @responses, sprintf '%-8s has %i services. %i are OK. There are %i errors, of which %i are filtered.',
+                    $host_to_chk, $services, $ok_checks, $errors, $filtered;
+
+
+
+    return @responses;
 }
 
 sub _monitor_status
