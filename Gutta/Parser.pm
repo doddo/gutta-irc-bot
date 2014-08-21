@@ -11,11 +11,11 @@ Gutta::Parser
 
 =head1 SYNOPSIS
 
-Parse and format messages to and from IRC server and Gutta::Plugins through Gutta::AbstractionLayer..
+Parse and format messages to and from IRC server and Gutta::Plugins through Gutta::Dispatcher..
 
 =head1 DESCRIPTION
 
-Messages from the IRC server gets parsed using the  Gutta::Parser, so that Gutta::AbstractionLayer knows what to to with them,
+Messages from the IRC server gets parsed using the  Gutta::Parser, so that Gutta::Dispatcher knows what to to with them,
 
 In addition to that, once a MSG have been recieved from the Plugins, the Gutta::Parser translate them to a format which makes sense to the IRC server.
 

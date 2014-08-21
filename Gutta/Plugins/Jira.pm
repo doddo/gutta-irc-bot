@@ -340,7 +340,7 @@ sub monitor_jira_feed
             my $feedkey;
             $feedkey = $1 if ($title =~ m|^([A-Z]+)-[0-9]+|);
 
-            $log->debug("Got news from $name about $did '$title' for feed $feedkey... parsing. a little more");
+            $log->trace("Got news from $name about $did '$title' for feed $feedkey... parsing. a little more");
 
             if ($feedkey && $$feeds{$feedkey})
             {
@@ -438,7 +438,7 @@ sub get_jira_issue
     $req->header( 'Content-Type' => 'application/json');
     if ($username && $password)
     {
-        warn("settting authirization headers $self->{data}{'username'},XXXXXX") ;
+        $log->Debug("settting auth headers $self->{data}{'username'},") ;
         $req->authorization_basic($username, $password);
     }
 
@@ -475,11 +475,11 @@ sub get_jira_user
 
     my $sth = $dbh->prepare('SELECT jira_username from jira_users WHERE nick = ?') or warn $dbh->errstr;
     # TODO handle errors.
-    $sth->execute($nick) or warn $dbh->errstr;
+    $sth->execute($nick) or $log->warn($dbh->errstr);
 
 
     my ($jira_username) = $sth->fetchrow_array();
-    warn ("GOT $jira_username \n");
+    $log->debug("GOT $jira_username \n");
 
     return $jira_username;
 }

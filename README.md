@@ -24,7 +24,7 @@ interface with gutta with guttacli (or through plugins)
 
 ## Plugins
 
-Gutta works with plugins, who recieves messages parsed by the Gutta::AbstractionLayer
+Gutta works with plugins, who recieves messages parsed by the Gutta::Dispatcher
 
 The plugins are expected to return a conventional irc message and supports a multitude of options.
 

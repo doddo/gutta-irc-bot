@@ -18,7 +18,7 @@ Log::Log4perl->init("Gutta/Config/Log4perl.conf");
 my $log = Log::Log4perl->get_logger();
 
 use Data::Dumper;
-use Gutta::AbstractionLayer;
+use Gutta::Dispatcher;
 
 my $server = "server";
 my $msg = shift;
@@ -26,7 +26,7 @@ my $nick = "nickysthlm";
 my $mask = "*";
 my $target = "#test123123";
 
-my $d = Gutta::AbstractionLayer->new();
+my $d = Gutta::Dispatcher->new();
 
 my @r = $d->process_privmsg (
     $server,
@@ -51,3 +51,4 @@ for (my $i=0;$i<5;$i++)
     sleep 1;
 }
 
+$gal->exit();

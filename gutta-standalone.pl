@@ -21,7 +21,7 @@ use Gutta::Constants;
 use Log::Log4perl;
 #Log::Log4perl->init(Gutta::Constants::LOG4PERLCONF);
 
-use Gutta::AbstractionLayer;
+use Gutta::Dispatcher;
 
 chdir(dirname(__FILE__));
 use Pod::Usage;
@@ -106,8 +106,8 @@ $login||=$own_nick;
 $log->info("Now starting Gutta irc bot.");
 
 
-# Start the Gutta::AbstractionLayer.
-my $gal = Gutta::AbstractionLayer->new(parse_response => 1,
+# Start the Gutta::Dispatcher.
+my $gal = Gutta::Dispatcher->new(parse_response => 1,
                                              own_nick => $own_nick);
 
 

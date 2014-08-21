@@ -1,6 +1,7 @@
 package Gutta::Plugins::Karma;
 use parent Gutta::Plugin;
 use Gutta::DBI;
+use Data::Dumper;
 # A module to to manage karma
 use strict;
 use warnings;
@@ -74,8 +75,8 @@ sub _triggers
 
     return {
            qr/([a-z0-9_@.ÅÄÖåäö]+?)(\+\+|--)/i => sub { $self->give_karma(@_) },
-                                   qr/^srank/  => sub { $self->srank(@_) },
-                                    qr/^rank/  => sub { $self->rank(@_) },
+                                   qr/^srank\b/  => sub { $self->srank('srank',@_) },
+                                    qr/^rank\b/  => sub { $self->srank('rank',@_) },
     };
 }
 
@@ -86,8 +87,8 @@ sub _commands
     my $self = shift;
 
     return {
-           'srank' => sub { $self->srank(@_) },
-           'rank'  => sub { $self->rank(@_) },
+           'srank' => sub { $self->srank('srank', @_) },
+           'rank'  => sub { $self->srank('rank', @_) },
     };
 }
 
@@ -95,40 +96,61 @@ sub _commands
 sub srank
 {
     my $self = shift;
+    $log->info("got this " . Dumper(@_));
+    my $action = shift;
     my $server = shift;
     my $msg = shift;
     my $nick = shift;
     my $mask = shift;
     my $target = shift;
     my $match = shift;
+    my $query;    
 
     # get the db handle.
     my $dbh = $self->dbh();
 
-    my $target_item;
-
-    $log->debug("examining srank for \"$match\"...");
-
-    # fetch what item to target from msg
-    # msg looks like ~ this "srank foo"
-    if ($msg =~ m/^srank\s+(\S+)\b/)
-    {
-        $target_item = ($1) ?  "%${1}%" : '%%';
-    } else {
-        $target_item = ($match) ?  "%${match}%" : '%%';
-    }
-
-    $log->debug("srank calling for \"$target_item\"...");
-
     # the array of respnoses to pass back to the caller
     # this is an array of IRC commands.
     my @responses;
+
+    my $target_item;
+
+    if ($action eq 'srank')
+    {
+        # fetch what item to target from msg
+        # msg looks like ~ this "srank foo"
+        if ($msg =~ m/^srank(?:\s+(\S+))?\b/)
+        {
+            $target_item = ($1) ?  "%${1}%" : '%%';
+        } else {
+            $target_item = ($match) ?  "%${match}%" : '%%';
+        }
+
+        $query = qq{
+            SELECT item, karma, rank FROM karma_toplist
+             WHERE item LIKE ?
+             LIMIT 6
+          };
+    
+    } else {
+        # fetch what item to target from msg
+        # msg looks like ~ this "rank foo"
+        if ($msg =~ m/^rank(?:\s+(\S+))?\b/)
+        {
+            $target_item = ($1) ?  ${1} : '';
+            
+        } else {
+            $target_item = ($match) ?  ${match} : '';
+        }
+        $query = qq{
+            SELECT item, karma, rank FROM karma_toplist
+             WHERE item = ?
+          };
+    }
+    $log->debug("$action called for \"$target_item\"...");
     
     # List top 10 karma items matching $target_item
-    my $sth = $dbh->prepare(q{
-        SELECT item, karma, rank FROM karma_toplist
-         WHERE item LIKE ? 
-    });
+    my $sth = $dbh->prepare($query);
     $sth->execute($target_item);    
 
     # run the query

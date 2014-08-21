@@ -1,4 +1,4 @@
-package Gutta::AbstractionLayer;
+package Gutta::Dispatcher;
 use strict;
 use warnings;
 use threads;
@@ -24,7 +24,7 @@ use Module::Pluggable search_path => "Gutta::Plugins",
 
 =head1 NAME
 
-Gutta::Plugins::AbstractionLayer
+Gutta::Plugins::Dispatcher
 
 =head1 SYNOPSIS
 
@@ -433,7 +433,7 @@ sub process_msg
     # ask the parser to parse the incoming $message from the server.
     my ($msgtype, @payload) = $self->{parser}->parse($message);
 
-    $log->debug("ITS A $msgtype") if $msgtype;
+    $log->trace("ITS A $msgtype") if $msgtype;
 
     switch ($msgtype)
     {
@@ -630,6 +630,14 @@ sub process_own_channel_join
     return;
 
 }
+
+
+sub quit
+{
+    my $self = shift;
+
+}
+
 
 sub quit_irc
 {
