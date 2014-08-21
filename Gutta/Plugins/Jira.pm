@@ -14,6 +14,7 @@ use Data::Dumper;
 use DateTime::Format::Strptime;
 use Getopt::Long qw(GetOptionsFromArray);
 
+my $log = Log::Log4perl->get_logger(__PACKAGE__);
 
 =head1 NAME
 
@@ -54,6 +55,46 @@ there can be a lot of --server and --channel flags in the same command line.
 
 then using the heartbeat, it will act on timer and poll on regular basis.
 
+=head1 jira
+
+Configure the configurations of jira. 
+
+use "jira set" to configure the jira server connection and other settings
+
+use "jira feed"  to configure feeds.
+
+=head2 set
+
+To set the hostname of the jira server you want to connect:
+
+  !jira set url=<jiraserver>
+
+To configure username (if needed) you say 
+
+  !jira set username=<username>
+
+To configure password (if needed) you say 
+
+  !jira set password=<password>
+
+
+=head1 feed
+
+Used like this:
+
+ !jira feed [add | del] [ FEEDKEY ] --server [ SERVER ] --channel [ CHANNEL ] '
+
+=over 8
+
+=item B<--server>
+
+regex to match for irc server connected to.
+
+=item B<--channel>
+
+To what IRC channel do we send these messages?
+
+=back
 
 =cut
 
@@ -224,7 +265,7 @@ sub heartbeat_res
         {
             if ($server =~ $server_ok_re)
             {
-                warn("$server matched $server_ok_re. Good.");
+                $log->debug("$server matched $server_ok_re. Good.");
                 $server_ok = 1;
             }
         }
@@ -260,68 +301,88 @@ sub monitor_jira_feed
     );
     my %news;
     $self->{news} = \%news;
-    my $latest_timestamp = 0;
+    my %latest_timestamp;
     my $nowt = DateTime->now();
     
-    foreach my $feedkey (keys %{$feeds})
+    # Download ALL the keys in one go.
+    my ($status, $feeddata) = $self->__download_jira_feed(keys %{$feeds});
+    unless ($status)
     {
-        $$feeds{$feedkey}{timestamp}||=0;
-        
-        my ($status, $feeddata) = $self->__download_jira_feed($feedkey);
-        
-        unless ($status)
-        {
-           warn ("unable to download for feed $feedkey: $feeddata\n");
-           next;
-        }
-        
-        my $feed = XML::FeedPP->new($feeddata);
-        
-        foreach my $item ($feed->get_item())
-        {
-            my $title = $item->title();
-            
-            # parse the pubDate from the item (the news item)
-            my $pubdate = $item->pubDate();
-            $pubdate =~ s/\.[0-9]{3}//;
-            my $dt = $strp->parse_datetime($pubdate);
-            my $post_timestamp =  $dt->strftime('%s');
-            
-            if ($post_timestamp <= $$feeds{$feedkey}{timestamp})  {
-                # Hers what happens with _OLD_ news
-                warn sprintf ("Jira feed:%s post_timestamp %s is older than latest stored timestamp: %s", 
-                                $feedkey,  $post_timestamp,  $$feeds{$feedkey}{timestamp});
-                next;
-            } elsif ($nowt->subtract_datetime_absolute($dt)->delta_seconds > 360000) {
-                # and  to prevent gutta from rambling old stuff because he's been out of sync
-                warn sprintf ("Jira feed:%s datetime from post %s is more than 1 hours older than current time %s", 
-                                $feedkey, $dt->strftime('%F %T'), $nowt->strftime('%F %T'));
-                next;
-           }
-           
-           if ($title =~ m{^\s* 
-                    <a\s*href=[^>]+>\s*([^<>]+)\s*</a>\s* # the name
-                        ((:?re)?opened|closed|created)\s* # what they do?
-            <}ix)
-            {
-                my $name = $1;
-                my $did = lc($2);
-                my $title = $hs->parse(substr($title, ($+[0]) - 1));
-                $title =~ s/\s+/ /gm;
-                $title =~ s/\s*$//;
-                my $link = $item->link();
-                
-                push @{$news{$feedkey}}, sprintf ("%s %s %s (%s)\n", $name, $did, $title, $link);
-                print sprintf ("OK %s %s %s (%s)\n", $name, $did, $title, $link);
-                $latest_timestamp = $post_timestamp if ( $post_timestamp > $latest_timestamp);
-           }
-        }
-        if ($$feeds{$feedkey}{timestamp} < $latest_timestamp)
-        {
-            $$feeds{$feedkey}{timestamp} = $latest_timestamp;
-            $self->save();
-        }
+       $log->error("unable to download jira feeds...: $feeddata\n");
+       return;
     }
+ 
+    # Parse the feeddata
+    my $feed = XML::FeedPP->new($feeddata);
+    
+    foreach my $item ($feed->get_item())
+    {
+        my $title = $item->title();
+        
+        # parse the pubDate from the item (the news item)
+        my $pubdate = $item->pubDate();
+        $pubdate =~ s/\.[0-9]{3}//;
+        my $dt = $strp->parse_datetime($pubdate);
+        my $post_timestamp =  $dt->strftime('%s');
+        
+       
+       if ($title =~ m{^\s* 
+                <a\s*href=[^>]+>\s*([^<>]+)\s*</a>\s* # the name
+                    ((:?re)?opened|closed|created)\s* # what they do?
+        <}ix)
+        {
+            my $name = $1;
+            my $did = lc($2);
+            my $title = $hs->parse(substr($title, ($+[0]) - 1));
+            $title =~ s/\s+/ /gm;
+            $title =~ s/\s*$//;
+            my $link = $item->link();
+            my $feedkey;
+            $feedkey = $1 if ($title =~ m|^([A-Z]+)-[0-9]+|);
+
+            $log->debug("Got news from $name about $did '$title' for feed $feedkey... parsing. a little more");
+
+            if ($feedkey && $$feeds{$feedkey})
+            {
+                # Make sure to initialise the timestamp for the news item
+                $$feeds{$feedkey}{timestamp}||=0;
+    
+                if ($post_timestamp <= $$feeds{$feedkey}{timestamp})  {
+                    # Hers what happens with _OLD_ news
+                    $log->debug(sprintf ("Jira feed:%s post_timestamp %s is older than latest stored timestamp: %s", 
+                                    $feedkey,  $post_timestamp,  $$feeds{$feedkey}{timestamp}));
+                    next;
+                } elsif ($nowt->subtract_datetime_absolute($dt)->delta_seconds > 360000) {
+                    # and  to prevent gutta from rambling old stuff because he's been out of sync
+                    $log->warn( sprintf ("Jira feed:%s datetime from post %s is more than 1 hours older than current time %s", 
+                                    $feedkey, $dt->strftime('%F %T'), $nowt->strftime('%F %T')));
+                    next;
+                } else {
+                    # Is this the latest new (making no assumption on the order of the news recieved...)
+                    if ($post_timestamp > $latest_timestamp{$feedkey})
+                    {
+                        # OK store the latest timestamp.
+                        $latest_timestamp{$feedkey} = $post_timestamp;
+                    }
+    
+                    push @{$news{$feedkey}}, sprintf ("%s %s %s (%s)\n", $name, $did, $title, $link);
+                    $log->info(sprintf ("OK %s %s %s (%s)\n", $name, $did, $title, $link));
+    
+                }
+            } else {
+                    $log->warn("UNCONFIGURED FEED $feedkey for news from $name about $did '$title'. This should not happen");
+            }
+        } 
+
+
+    }
+    # OK update timestamps in the persistent hash.
+    while (my ($feedkey, $timestamp) = each %latest_timestamp)
+    {
+        $$feeds{$feedkey}{timestamp} = $timestamp;
+    }
+    # And saving it!!
+    $self->save();
 }
 
 sub __download_jira_feed
@@ -329,7 +390,7 @@ sub __download_jira_feed
     #Download from the jira feed.
     # it will search for KEY=$feedkay key.is+$feedkey
     my $self = shift;
-    my $feedkey = shift;
+    my @feedkeys = @_;
     my $url = $self->get_config('url');
     my $username = $self->get_config('username');
     my $password = $self->get_config('password');
@@ -338,7 +399,9 @@ sub __download_jira_feed
     return 0, "please set url to download the feed" unless $url;
 
     my $ua = LWP::UserAgent->new;
-    my $feedURL = sprintf("https://%s/activity?maxResults=10&streams=key+IS+%s", $url, $feedkey);
+    # https://jira.atlassian.com/activity?maxResults=10&streams=key+IS+CONF+OR+CQ+OR+BAM
+    my $feedURL = sprintf("https://%s/activity?maxResults=20&streams=key+IS+%s", $url, join('+OR+', @feedkeys));
+    $log->debug("Attempting a download of   [$feedURL]");
 
     my $req = HTTP::Request->new(GET => $feedURL);
     if ($username && $password)
