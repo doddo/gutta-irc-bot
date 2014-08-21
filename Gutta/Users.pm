@@ -239,8 +239,9 @@ sub is_admin_with_session
     # "boolean" returns whether the user is a logged in admin
     my $self = shift;
     my $nick = shift;
+    my $mask = shift;
 
-    if ($self->has_session($nick) && $self->is_admin($nick))
+    if ($self->has_session($nick, $mask) && $self->is_admin($nick))
     {
         return 1
     } else {
