@@ -98,12 +98,10 @@ sub guttacleanup
     if ( -e $db )
     {
         $log->info("Removing session db file '$db'.");
-        unlink ( $db ) or die $!;
+        unlink ( $db ) or $log->warn($!);
     }
 
-
 }
-
 
 
 1;
