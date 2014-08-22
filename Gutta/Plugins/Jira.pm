@@ -438,7 +438,7 @@ sub get_jira_issue
     $req->header( 'Content-Type' => 'application/json');
     if ($username && $password)
     {
-        $log->Debug("settting auth headers $self->{data}{'username'},") ;
+        $log->debug("settting auth headers $self->{data}{'username'},") ;
         $req->authorization_basic($username, $password);
     }
 
