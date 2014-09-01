@@ -2,7 +2,7 @@ package Gutta::Tests::Plugins;
 
 use Pod::Usage;
 
-use Test::More tests => 20;
+use Test::More tests => 22;
 
 use strict;
 use warnings;
