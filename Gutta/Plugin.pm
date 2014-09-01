@@ -45,8 +45,8 @@ sub _initialise
 {
     # called when plugin is istansiated
     my $self = shift;
-    $self->{triggers} = $self->_triggers();
-    $self->{commands} = $self->_commands();
+    #$self->{triggers} = $self->_triggers();
+    #$self->{commands} = $self->_commands();
 
     $self->{datafile} = "Gutta/Data/" . __PACKAGE__ . ".data",
 
@@ -70,6 +70,18 @@ sub _get_commands
 {
     my $self = shift;
     # override this in plugin to set custom commands
+    #
+    # The dispatch table for "commands", which is the first word sent to Gutta
+    # it may be prefixed with $CMDPREFIX in parent, depending on context:
+    #  (private vs public msg)
+    #
+    return $self->{commands};
+}
+
+sub _get_event_handlers
+{
+    my $self = shift;
+    # override this in plugin to set custom event_handlers
     #
     # The dispatch table for "commands", which is the first word sent to Gutta
     # it may be prefixed with $CMDPREFIX in parent, depending on context:
@@ -216,6 +228,20 @@ sub trigger
 
     
     return $self->{triggers}{$trigger}->(@_);
+}
+
+sub handle_event
+{
+    my $self = shift;
+    my $eventtype = shift;
+    # Left in 
+    # it will
+    # DO IT (something like this) = shift;
+    #
+    $self->{event_handlers} ||= $self->_event_handlers();
+    return unless $self->{event_handlers};
+
+    return $self->{event_handlers}{$eventtype}->(@_);
 }
 
 

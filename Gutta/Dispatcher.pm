@@ -16,10 +16,9 @@ use Log::Log4perl;
 Log::Log4perl->init(Gutta::Constants::LOG4PERLCONF);
 my $log = Log::Log4perl->get_logger(__PACKAGE__);
 
-# Instantiate all the plugins.
+# Load the plugins.
 use Module::Pluggable search_path => "Gutta::Plugins",
                           require => 1;
-#                      instantiate => 'new';
 
 
 =head1 NAME
@@ -46,9 +45,9 @@ easy to implement in other irc clients than gutta-standalone.pl
 
 
 # Getting the PLUGINS
-my @PLUGINS ; #= plugins();
-my %PLUGINS ; #= map { ref $_ => $_ } @PLUGINS;
-my $PLUGINS ; # = \%PLUGINS;
+my @PLUGINS;
+my %PLUGINS;
+my $PLUGINS;
 
 # The plugins tasks queues
 #
@@ -67,7 +66,6 @@ my $RESPONSES = Thread::Queue->new();
 
 # The hash of Thread::Queue:s.
 my %TASKS;
-
 
 
 sub new
@@ -125,9 +123,12 @@ sub __initialise_plugins
     $PLUGINS = \%PLUGINS;
 
     # load commands and triggers from plugins
+    # This is all parsed from PRIVMSG:s
     $self->{triggers} = $self->_load_triggers();
     $self->{commands} = $self->_load_commands();
 
+    # Plugins may also handle any event, using the event_handlers.
+    $self->{event_handlers} = $self->_load_event_handlers();
 }
 
 sub __initialise_threads
@@ -207,13 +208,13 @@ sub _load_triggers
 
 sub _load_commands
 {
-    # Get the commands for the plugins and put them on a hash.
-    # The commands are regular expressions mapped to functions in the
+    # get the commands for the plugins and put them on a hash.
+    # the commands are regular expressions mapped to functions in the
     # plugins.
     my $self = shift;
     
     my %commands;
-    $log->info("GETTING COMMANDS !!!");
+    $log->info("getting commands !!!");
 
     while (my ($plugin_key, $plugin) = each %PLUGINS)
     {
@@ -222,7 +223,7 @@ sub _load_commands
         {
             $log->debug(sprintf "loaded %i commands for %s", scalar keys %{$t}, $plugin_key);
             $commands{$plugin_key} = $t;
-            # Loading the context with these commands now.
+            # loading the context with these commands now.
             $self->{context}->set_plugincontext($plugin_key, 'commands',  keys %{$t});
         } else {
             $log->debug(sprintf "loaded 0 commands for %s", $plugin_key);
@@ -231,6 +232,35 @@ sub _load_commands
 
     return \%commands;
 }
+
+
+sub _load_event_handlers
+{
+    # Read all plugins event handlers. Every MSG:type which the Gutta::Parser
+    # can parse from the messages from the server it can by-pass to the event
+    # handlers ...
+    my $self = shift; 
+    my %event_handlers;
+    $log->info("getting event_handlers !!!");
+
+    while (my ($plugin_key, $plugin) = each %PLUGINS)
+    {
+        next unless $plugin->can('_event_handlers');
+        if (my $t = $plugin->_event_handlers())
+        {
+            $log->debug(sprintf "loaded %i event_handlers for %s", scalar keys %{$t}, $plugin_key);
+            $event_handlers{$plugin_key} = $t;
+            # loading the context with these event_handlers now.
+            $self->{context}->set_plugincontext($plugin_key, 'event_handlers',  keys %{$t});
+        } else {
+            $log->debug(sprintf "loaded 0 event_handlers for %s", $plugin_key);
+        }
+    }
+
+    return \%event_handlers;
+}
+
+
 
 sub start_worker
 {
@@ -292,11 +322,12 @@ sub plugin_worker
     while (my $inc_msg = $queue->dequeue())
     {
         my @responses;
-        my ($timestamp, $tasktype, $plugin_ref, $command_or_trigger, $server, $msg, $nick, $mask,
-           $target, $rest_of_msg) =  @{$inc_msg};
+        my ($timestamp, $tasktype, $plugin_ref, $eventtype, $server, @payload) = @{$inc_msg};
+
         $log->trace("worker #$no got a new msg of type $tasktype to process for $plugin_ref from queue $queue");
         if ($tasktype eq 'command')
         {
+            my ($msg, $nick, $mask, $target, $rest_of_msg) = @payload;
             # check to see whether the plugin does exist.
             unless ($PLUGINS{$plugin_ref})
             {
@@ -304,23 +335,24 @@ sub plugin_worker
             } else {
 
                 $log->debug(sprintf "thread #%-2i got command %s %s for queue %s", 
-                                            $no, $command_or_trigger, $plugin_ref, $queue);
+                                            $no, $eventtype, $plugin_ref, $queue);
                 eval {
                     # Start the plugin "$plugin_ref";s  command. pass along all variables to it.
                     if ($PLUGINS{$plugin_ref} and $PLUGINS{$plugin_ref}->can('command'))
                     {
-                        push @responses, $PLUGINS{$plugin_ref}->command($command_or_trigger,
+                        push @responses, $PLUGINS{$plugin_ref}->command($eventtype,
                                                     $server, $msg, $nick, $mask, $target, $rest_of_msg, $timestamp);
                     }
                 };
                 $log->error($@) if $@; # TODO fix.
             }
         } elsif ($tasktype eq 'trigger'){
+            my ($msg, $nick, $mask, $target, $rest_of_msg) = @payload;
             $log->debug(sprintf "thread #%-2i got trigger %s %s for queue %s", 
-                                            $no, $command_or_trigger, $plugin_ref, $queue);
+                                            $no, $eventtype, $plugin_ref, $queue);
             eval {
                 # Start the plugin "$plugin_ref";s triggers. pass along all variables to it.
-                push @responses, $PLUGINS{$plugin_ref}->trigger($command_or_trigger, 
+                push @responses, $PLUGINS{$plugin_ref}->trigger($eventtype, 
                                             $server, $msg, $nick, $mask, $target, $rest_of_msg, $timestamp);
             };
             $log->error($@) if $@; # TODO fix.
@@ -350,6 +382,16 @@ sub plugin_worker
                 $HEARTBEAT->enqueue($inc_msg);
             }
 
+        } elsif ($tasktype eq 'event') {
+            eval {
+                if ($PLUGINS{$plugin_ref}->can('handle_event'))
+                {
+                    $PLUGINS{$plugin_ref}->handle_event($eventtype, $timestamp,  $server, @payload);
+                }
+
+            };
+            warn ($@) if $@; # TODO fix            
+ 
         } elsif ($tasktype eq 'disable' or $tasktype eq 'reload')  {
             # Disable a plugin.
             $log->info("deleting ${plugin_ref} from worker ${no}.");
@@ -444,9 +486,40 @@ sub process_msg
              case 'QUIT' { @irc_cmds = $self->process_quit($server, @payload) }
     }
 
+    if ($msgtype)
+    {
+        # Send the msg to appropriate plugins...
+        $self->_send_to_plugins($msgtype, $server, @payload);
+    }
+
     # if something returns IRC Commands, pass them through.
     return @irc_cmds;
 }
+
+
+sub _send_to_plugins
+{
+    # sends the message as parsed by the parser to the plugins who wants them.
+    my $self = shift;
+    my $msgtype = shift;
+    my $server = shift;
+    my @payload = @_;
+
+    # get all  for all plugins.
+    while (my ($plugin_ref, $event_handler) = each %{$self->{event_handlers}})
+    {
+        if (exists $$event_handler{$msgtype})
+        {
+            
+            # if the message type incoming has any event handlers, then add the
+            # message to those queues.
+            $log->debug(sprintf 'sending event %s to plugin %s in queue %s', 
+                                   $msgtype,  $plugin_ref, $TASKS{$plugin_ref});
+            $TASKS{$plugin_ref}->enqueue([ time, 'event', $plugin_ref, $msgtype, $server, @payload]);
+        }
+    }
+}
+
 
 sub process_privmsg
 {
@@ -591,8 +664,6 @@ sub process_join_or_part
     } elsif ($what eq 'PART') {
         $self->{context}->_process_part($server,$nick,$mask,$channel);
     }
-
-    # TODO: Notify the plugins about this
 
     return;
 }
