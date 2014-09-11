@@ -2,11 +2,11 @@ package Gutta::Plugins::DO;
 # Allows admins to make bot run irc commands
 #
 use Gutta::Users;
-
 use parent Gutta::Plugin;
 
 use strict;
 use warnings;
+use Data::Dumper;
 
 =head1 NAME
 
@@ -31,6 +31,8 @@ For example:
 And gutta irc bot will join #Linux, (or try atleast).
 
 =cut
+
+my $log = Log::Log4perl->get_logger(__PACKAGE__);
 
 
 sub _initialise
@@ -57,7 +59,6 @@ sub do
     my $nick_reginfo = $self->{users}->get_user($nick);
     
     return "msg $target NO." unless $$nick_reginfo{'admin'};
-
 
     return ("msg $target OK $nick, -  I will try.", $rest_of_msg);
 }
