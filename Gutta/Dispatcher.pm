@@ -8,6 +8,7 @@ use Gutta::Users;
 use Gutta::Parser;
 use Gutta::Init qw/guttainit/;
 use Gutta::Context;
+use Gutta::Session;
 use Data::Dumper;
 use Switch;
 use Log::Log4perl;
@@ -87,6 +88,8 @@ sub new
     #
     guttainit();
     $self->{context} = Gutta::Context->new();
+    $self->{session} = Gutta::Session->instance();
+           
 
     # setting commandprefix based on own_nick
     if ($params{own_nick})
@@ -196,7 +199,7 @@ sub _load_triggers
             $triggers{$plugin_key} = $t;
 
             # Loading the context with these triggers now.
-            $self->{context}->set_plugincontext($plugin_key, 'triggers', keys %{$t});
+            $self->{session}->set_plugincontext($plugin_key, 'triggers', keys %{$t});
 
         } else {
             $log->debug(sprintf "loaded 0 triggers for %s\n", $plugin_key);
@@ -224,7 +227,7 @@ sub _load_commands
             $log->debug(sprintf "loaded %i commands for %s", scalar keys %{$t}, $plugin_key);
             $commands{$plugin_key} = $t;
             # loading the context with these commands now.
-            $self->{context}->set_plugincontext($plugin_key, 'commands',  keys %{$t});
+            $self->{session}->set_plugincontext($plugin_key, 'commands',  keys %{$t});
         } else {
             $log->debug(sprintf "loaded 0 commands for %s", $plugin_key);
         }
@@ -251,7 +254,7 @@ sub _load_event_handlers
             $log->debug(sprintf "loaded %i event_handlers for %s", scalar keys %{$t}, $plugin_key);
             $event_handlers{$plugin_key} = $t;
             # loading the context with these event_handlers now.
-            $self->{context}->set_plugincontext($plugin_key, 'event_handlers',  keys %{$t});
+            $self->{session}->set_plugincontext($plugin_key, 'event_handlers',  keys %{$t});
         } else {
             $log->debug(sprintf "loaded 0 event_handlers for %s", $plugin_key);
         }

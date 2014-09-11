@@ -28,6 +28,30 @@ List a help message with support for additional SUBTOPIC
 
 my $log;
 
+sub _initialise
+{
+    # called when plugin is istansiated
+    my $self = shift;
+    # The logger
+    $log = Log::Log4perl->get_logger(__PACKAGE__);
+}
+
+
+sub _commands
+{
+    my $self = shift;
+    # override this in plugin to set custom triggers
+    #
+    # The dispatch table for "triggers" which will be triggered
+    # when one of them matches the IRC message.
+    return {
+
+        "help" => sub { $self->help(@_) },
+
+    }
+}
+
+
 
 sub help
 {
@@ -41,7 +65,10 @@ sub help
     
 
     my $file_to_check;
-    my $commands = $self->{ context }->get_plugin_commands();
+    my $commands = $self->{ session }->get_plugin_commands();
+
+    print Dumper($commands);
+
     my @responses;
 
     # they need someonw to help
@@ -65,7 +92,7 @@ sub help
             my @topics; #the help topics to select.
             # GET THE plugin_name from the command.
             # TODO I bet there is a better way to do this ;)
-            $file_to_check = join('/', split(/::/, $$commands{$command}->{'plugin_name'}));
+            $file_to_check = join('/', split(/::/, $$commands{$command}));
             $file_to_check.='.pm' ;
             $log->debug( "OK there *shpould* be help here, in $file_to_check maybe\n");
 
@@ -117,26 +144,4 @@ sub help
     return @responses;
 }
 
-sub _initialise
-{
-    # called when plugin is istansiated
-    my $self = shift;
-    # The logger
-    $log = Log::Log4perl->get_logger(__PACKAGE__);
-}
-
-
-sub _commands
-{
-    my $self = shift;
-    # override this in plugin to set custom triggers
-    #
-    # The dispatch table for "triggers" which will be triggered
-    # when one of them matches the IRC message.
-    return {
-
-        "help" => sub { $self->help(@_) },
-
-    }
-}
 1;

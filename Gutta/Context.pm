@@ -14,6 +14,7 @@ Gutta::Context
 
 =head1 SYNOPSIS
 
+This module is deprecated.
 The Gutta::Context keeps track of everything the bot knows from the IRC serves and Plugins.
 
 =head1 DESCRIPTION
@@ -55,41 +56,6 @@ sub dbh
      return $self->{ dbh };
 }
 
-sub set_plugincontext
-{
-    # Sets the plugins commands and triggers, and saves them.
-    my $self = shift;
-    my $plugin_name = shift;
-    my $what_it_is = shift;
-    my @payload = @_;
-
-    my $dbh = $self->dbh();
-
-    my $sth = $dbh->prepare('INSERT INTO pluginmeta (plugin_name, what_it_is, value) VALUES(?,?,?)');
-
-    foreach my $value (@payload)
-    {
-        $log->trace("setting $what_it_is for $plugin_name: $value");
-        $sth->execute($plugin_name, $what_it_is, $value);
-    }
-}
-
-sub get_plugin_commands
-{
-    # Return a list of al the commands registered from the plugins
-    my $self = shift;
-
-    my $dbh = $self->dbh();
-
-    my $sth = $dbh->prepare('SELECT plugin_name, value FROM pluginmeta where what_it_is = "commands"');
-
-    $sth->execute();
-
-    my $r = $sth->fetchall_hashref('value');
-
-    return $r;
-    
-}
 
 sub _set_nicks_for_channel
 {

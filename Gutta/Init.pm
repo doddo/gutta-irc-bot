@@ -18,7 +18,7 @@ Gutta::Init
 
 =head1 SYNOPSIS
 
-Initialize gutta runtime environment.
+Initialize gutta runtime environment in a Deprecated manner.
 
 =cut
 
@@ -51,13 +51,6 @@ sub guttainit
 
 
     $dbh->do($_) foreach q{
-         CREATE TABLE IF NOT EXISTS pluginmeta (
-          plugin_name TEXT NOT NULL,
-                value TEXT NOT NULL,
-           what_it_is TEXT NOT NULL,
-           CONSTRAINT plugin_c UNIQUE (plugin_name, value, what_it_is) 
-                   ON CONFLICT REPLACE
-        )}, q{
          CREATE TABLE IF NOT EXISTS nicks (
                  nick TEXT PRIMARY KEY,
                 modes TEXT,
@@ -102,6 +95,5 @@ sub guttacleanup
     }
 
 }
-
 
 1;
