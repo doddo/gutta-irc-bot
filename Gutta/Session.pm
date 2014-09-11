@@ -47,4 +47,38 @@ sub get_plugin_commands
 }
 
 
+sub _set_nicks_for_channel
+{
+    # Set who joins or a channel
+    my $self = shift;
+    my $server = shift;
+    my $channel = shift;
+    my @nicks = @_;
+
+    foreach my $nick (@nicks)
+    {
+        my $op = 0;
+        my $voice = 0;
+        # Check if nick is an operator or has voice
+        if ($nick =~ s/^([+@])//)
+        {
+            if ($1 eq '@')
+            {
+                $op = 1;
+            } else {
+                $voice = 1; 
+            }
+        }
+
+        $self->{nicks}{$nick} ||= Gutta::Session::Nicks->New();
+
+        $self->{nicks}{$nick}->nick($nick);
+        # TODO: join channel etc etch
+
+        $self->{channels}{$channel}{$nick} = $self->{nicks}{$nick};
+        
+        
+    }
+}
+
 1;
