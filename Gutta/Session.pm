@@ -46,6 +46,19 @@ sub get_plugin_commands
     return $misc->get_plugin_commands(@_);
 }
 
+sub get_foo
+{
+    my $self = shift;
+    return join ",", @{$self->{foo}};
+}
+
+sub set_foo
+{
+    my $self = shift;
+    my $what = shift;
+    push @{$self->{foo}}, $what;
+}
+
 
 sub _set_nicks_for_channel
 {
@@ -54,6 +67,13 @@ sub _set_nicks_for_channel
     my $server = shift;
     my $channel = shift;
     my @nicks = @_;
+
+    unless($self->{channels}{$channel})
+    {
+        $log->debug("setting up new channel $channel...");
+        %{$self->{channels}->{$channel}} = ();
+    }
+
 
     foreach my $nick (@nicks)
     {
@@ -69,16 +89,91 @@ sub _set_nicks_for_channel
                 $voice = 1; 
             }
         }
+        $log->info("'$nick' is joined to '$channel'...");
 
         $self->{nicks}{$nick} ||= Gutta::Session::Nicks->New();
 
         $self->{nicks}{$nick}->nick($nick);
         # TODO: join channel etc etch
 
-        $self->{channels}{$channel}{$nick} = $self->{nicks}{$nick};
-        
+        $self->{ channels }{ $channel }{$nick} = \$self->{nicks}{$nick};
+
+    my @kalle = keys %{$self->{ channels }{$channel}};
+        $log->info("nicks for $channel is " .  join "," , @kalle);
         
     }
 }
+
+sub get_nicks_from_channel
+{
+    my $self = shift;
+    my $channel = shift;
+    
+    if ($self->{ channels }{$channel})
+    {
+        $log->warn("query for unknown channel $channel...");
+        return undef;
+    }
+
+    map { $log->info("I got this $_") } keys %{$self->{ channels }{$channel}};
+    
+    $log->debug("getting infor from $channel...");
+    $log->debug(Dumper(%{$self->{ channels }{$channel}}));
+
+    my @kalle = keys %{$self->{ channels }{$channel}};
+
+    $log->info("nicks for $channel is " .  join "," , @kalle);
+
+    return @kalle;
+
+}
+
+sub _process_join
+{
+    my $self = shift;
+    my $nick = shift;
+    my $mask = shift;
+    my $channel = shift;
+
+    $log->debug("Proccesing channel join for $nick on $channel");
+    $self->{nicks}{$nick} ||= Gutta::Session::Nick->new();
+
+    $self->{nicks}{$nick}->nick($nick);
+    $self->{nicks}{$nick}->mask($mask);
+    # TODO: join channel etc etch
+
+    unless($self->{channels}{$channel})
+    {
+        $log->debug("setting up new channel $channel...");
+        %{$self->{channels}->{$channel}} = ();
+    }
+
+    $self->{channels}{$channel}{$nick} = \$self->{nicks}{$nick};
+    my @kalle = keys %{$self->{ channels }{$channel}};
+    $log->info("nicks for $channel is " .  join "," , @kalle);
+
+    $log->debug(Dumper %{$self->{channels}->{$channel}});
+
+
+}
+
+sub _process_part
+{
+    my $self = shift;
+    my $nick = shift;
+    my $mask = shift;
+    my $channel = shift;
+
+    $log->debug("Proccesing channel part for $nick on $channel");
+    $self->{nicks}{$nick} ||= Gutta::Session::Nicks->New();
+
+    $self->{nicks}{$nick}->nick($nick);
+    $self->{masks}{$nick}->mask($mask);
+    # TODO: join channel etc etch
+
+    delete($self->{channels}{$channel}{$nick});
+
+}
+
 
 1;
