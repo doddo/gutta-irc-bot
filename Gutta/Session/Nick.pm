@@ -25,7 +25,6 @@ TODO: write something here...
 
 # The logger
 my $log = Log::Log4perl->get_logger(__PACKAGE__);
-my $parser = Gutta::Parser->new();
 
 sub new
 {
@@ -35,12 +34,10 @@ sub new
     my $self  = bless {
         nick => $params{ nick } || undef,
         mask => $params{ mask } || undef,
-    channels => $params{ channels } ||(),
     }, $class;
 
     return $self;
 }
-
 
 sub nick
 {
