@@ -1,7 +1,6 @@
 package Gutta::Plugin;
 use Gutta::DBI;
 use Gutta::Context;
-use Gutta::Session;
 use Storable;
 use strict;
 use warnings;
@@ -19,7 +18,6 @@ sub new
      heartbeat_act_s => 58,   # default act on heartbeats ~ every 58 secs.
     heartbeat_act_ts => time, # Setting timestamp "time is now"
                   db => Gutta::DBI->instance(),
-             session => Gutta::Session->instance(),
              context => Gutta::Context->new(),
     }, $class;
 
