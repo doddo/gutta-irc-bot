@@ -7,6 +7,7 @@ use Data::Dumper;
 use parent Gutta::Plugin;
 use strict;
 use warnings;
+use Gutta::Session;
 
 =head1 NAME
 
@@ -65,7 +66,11 @@ sub help
     
 
     my $file_to_check;
-    my $commands = $self->{ session }->get_plugin_commands();
+    my $session = Gutta::Session->instance();
+
+    print Dumper($session->{ channels }{'#test123123'});
+
+    my $commands = $session->get_plugin_commands();
 
     print Dumper($commands);
 

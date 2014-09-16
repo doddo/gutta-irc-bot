@@ -6,8 +6,6 @@ use Thread::Queue;
 use Gutta::DBI;
 use Gutta::Users;
 use Gutta::Parser;
-use Gutta::Init qw/guttainit/;
-use Gutta::Context;
 use Gutta::Session;
 use Data::Dumper;
 use Switch;
@@ -70,7 +68,7 @@ my %TASKS;
 
 
 # The set of shared data
-our $SESSION = Gutta::Session->instance();
+my $SESSION = Gutta::Session->instance();
 
 
 sub new
@@ -90,9 +88,6 @@ sub new
 
     # Initialise the gutta runtime environment:
     #
-    guttainit();
-    $self->{context} = Gutta::Context->new();
-           
 
     # setting commandprefix based on own_nick
     if ($params{own_nick})
@@ -683,27 +678,31 @@ sub process_quit
 
     $log->debug("I just found out that $nick whith hostmask $mask QUIT:ed");
 
-    $self->{context}->_process_quit($server,$nick);
+    $SESSION->_process_quit($nick, $mask);
 
-    # TODO: Notify the plugins about this
     return;
 }
 
 sub process_own_channel_join
 {
-    # Process the incoming messages from the parser. This is when the bot joins some channel.
+    # Process the incoming 353 msg from the parser. This is when the bot joins some channel.
+    # it returns 
+    #
+    #    $+{server}, $+{channel}, $+{chantype}, @nicks;
+    #
+    # But the dispatcher adds the $server, but that we dont care about for now
     my $self = shift;
-    my $server = shift;
+    my $server = shift; # This is the server connected to from the bot
+    my $ircserver = shift; # This is how that server names itself .
     my $channel = shift;
-    my $chantype = shift;
+    my $chantype = shift; # <-- This is discarded for now -..
     my @nicks = @_;
 
-    # Add the nicks found to the context so plugins may use them.
-    $self->{context}->_set_nicks_for_channel($server, $channel, @nicks);
+    $log->debug("processing 353 for $channel, server=$server,type=$chantype");
 
-#    print Dumper($self->{context}->get_nicks_from_channel($server, $channel));
+    # Add the populate the session with this data!!!
+    $SESSION->_set_nicks_for_channel($server, $channel, @nicks);
 
-    
     return;
 
 }

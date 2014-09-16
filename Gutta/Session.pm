@@ -4,15 +4,14 @@ use strict;
 use vars qw(@ISA);
 our @ISA = qw(Class::Singleton);
 
-use Gutta::Session::Misc;
-use Gutta::Session::Nick;
 use Data::Dumper;
 
+use threads;
+use threads::shared;
 
+use Scalar::Util;
 
 my $log = Log::Log4perl->get_logger(__PACKAGE__);
-my $misc = Gutta::Session::Misc->new();
-
 
 =head1 NAME
 
@@ -30,12 +29,51 @@ Most of the things known by gutta will be stored here for later use.
 =cut
 
 
+sub _new_instance
+{
+    # The constructor.
+    # Here we share some different hashes for use in data representation.
+    #
+    #
+    my $class = shift;
+    share(my %self);
+    
+    my %n;
+    my %c;
+    my %p;
+   
+    $self{ nicks } = shared_clone(\%n);
+    $self{ channels} = shared_clone(\%c);
+    $self{ plugincontext } = shared_clone(\%p);
+    
+    return (bless(\%self, $class));
+}
 
 sub set_plugincontext
 {
-    my $self = shift;
-    $misc->set_plugincontext(@_);
+    # Sets the plugins commands and triggers, and saves them.
 
+    my $self = shift;
+    my $plugin_ref = shift;
+    my $what_it_is = shift;
+    my @payload = @_;
+
+    $log->debug("Setting context keys for $plugin_ref -> $what_it_is");
+
+    my $pc = \%{$self->{ plugincontext }};
+    
+    unless (exists  $pc->{ $what_it_is })
+    {
+        my %p: shared;
+        $$pc{$what_it_is} = \%p;
+    }
+
+
+    foreach (@payload)
+    {
+
+        $self->{ plugincontext }->{$what_it_is}->{$_} = $plugin_ref;
+    }
 }
 
 sub get_plugin_commands
@@ -43,65 +81,81 @@ sub get_plugin_commands
     # Return a list of al the commands registered from the plugins
     my $self = shift;
 
-    return $misc->get_plugin_commands(@_);
+    return $self->{ plugincontext }->{ 'commands' };
 }
 
-sub get_foo
+sub _join_nick_to_channel
 {
-    my $self = shift;
-    return join ",", @{$self->{foo}};
-}
+    #  Associates a nick with a channel.
+    #   puts as much info as possible into that nick 
+    #   update étc.
 
-sub set_foo
-{
     my $self = shift;
-    my $what = shift;
-    push @{$self->{foo}}, $what;
+    my $nick = shift;
+    my $channel = shift;
+
+    my $nick_data = shift; #<-- this is hash_ref...
+
+    lock($self);
+    my $vars = $self->{channels};
+
+    unless (exists $$vars{$channel})
+    {
+        my %p: shared;
+        $$vars{$channel} = \%p;
+        $log->info("initialising $channel...");
+    }
+
+    unless (exists $$vars{$channel}{$nick})
+    {
+        my %p: shared;
+        $$vars{$channel}{$nick} = \%p;
+    }
+    
+    my $nick_ref = \%{$self->{ channels }{$channel}{$nick}};
+
+    # Copying the found data over => the nickinfo for found channel.
+    while ( my ($key, $value) = each(%$nick_data) ) {
+        $log->trace( "$key => $value");
+        $$nick_ref{$key} = $value;
+    }
+
+    $log->error(Dumper($self->{ channels }{$channel}));
 }
 
 
 sub _set_nicks_for_channel
 {
-    # Set who joins or a channel
+    # when recieving a 353 NICKS from the Gutta::Dispatcher, process it here
+    # and process the data ...
     my $self = shift;
     my $server = shift;
     my $channel = shift;
     my @nicks = @_;
+    my %nicklist;
 
-    unless($self->{channels}{$channel})
-    {
-        $log->debug("setting up new channel $channel...");
-        %{$self->{channels}->{$channel}} = ();
-    }
-
+    $log->debug("Processing a 353");
 
     foreach my $nick (@nicks)
     {
         my $op = 0;
         my $voice = 0;
+        my $mode;
         # Check if nick is an operator or has voice
         if ($nick =~ s/^([+@])//)
         {
-            if ($1 eq '@')
-            {
-                $op = 1;
-            } else {
-                $voice = 1; 
-            }
+           $mode = $1; 
         }
         $log->info("'$nick' is joined to '$channel'...");
 
-        $self->{nicks}{$nick} ||= Gutta::Session::Nicks->New();
+        my %n = (
+              nick => $nick,
+              mode => $mode,
+        );
 
-        $self->{nicks}{$nick}->nick($nick);
-        # TODO: join channel etc etch
-
-        $self->{ channels }{ $channel }{$nick} = \$self->{nicks}{$nick};
-
-    my @kalle = keys %{$self->{ channels }{$channel}};
-        $log->info("nicks for $channel is " .  join "," , @kalle);
-        
+        $self->_join_nick_to_channel($nick, $channel, \%n);
     }
+    
 }
 
 sub get_nicks_from_channel
@@ -109,51 +163,36 @@ sub get_nicks_from_channel
     my $self = shift;
     my $channel = shift;
     
-    if ($self->{ channels }{$channel})
+    unless (exists $self->{ channels }{$channel})
     {
         $log->warn("query for unknown channel $channel...");
         return undef;
     }
 
-    map { $log->info("I got this $_") } keys %{$self->{ channels }{$channel}};
-    
-    $log->debug("getting infor from $channel...");
-    $log->debug(Dumper(%{$self->{ channels }{$channel}}));
+    print Dumper($self->{ channels }{$channel});
 
-    my @kalle = keys %{$self->{ channels }{$channel}};
-
-    $log->info("nicks for $channel is " .  join "," , @kalle);
-
-    return @kalle;
-
+    return keys %{ $self->{ channels }{ $channel } };
 }
 
 sub _process_join
 {
+    # Called by Gutta::Dispatcher when recieved a JOIN notice from the irc
+    # server.
     my $self = shift;
     my $nick = shift;
     my $mask = shift;
     my $channel = shift;
 
     $log->debug("Proccesing channel join for $nick on $channel");
-    $self->{nicks}{$nick} ||= Gutta::Session::Nick->new();
 
-    $self->{nicks}{$nick}->nick($nick);
-    $self->{nicks}{$nick}->mask($mask);
-    # TODO: join channel etc etch
+    # create a hash and put known data in there.
+    my %nick_data = (
+       nick => $nick,
+       mask => $mask,
+    );
 
-    unless($self->{channels}{$channel})
-    {
-        $log->debug("setting up new channel $channel...");
-        %{$self->{channels}->{$channel}} = ();
-    }
-
-    $self->{channels}{$channel}{$nick} = \$self->{nicks}{$nick};
-    my @kalle = keys %{$self->{ channels }{$channel}};
-    $log->info("nicks for $channel is " .  join "," , @kalle);
-
-    $log->debug(Dumper %{$self->{channels}->{$channel}});
-
+    # then send the ref here
+    $self->_join_nick_to_channel($nick, $channel, \%nick_data);
 
 }
 
@@ -165,13 +204,21 @@ sub _process_part
     my $channel = shift;
 
     $log->debug("Proccesing channel part for $nick on $channel");
-    $self->{nicks}{$nick} ||= Gutta::Session::Nicks->New();
 
-    $self->{nicks}{$nick}->nick($nick);
-    $self->{masks}{$nick}->mask($mask);
-    # TODO: join channel etc etch
+    lock($self);
+    delete  $self->{channels}{$channel}{$nick};
 
-    delete($self->{channels}{$channel}{$nick});
+
+}
+
+sub _process_quit
+{
+    my $self = shift;
+    my $nick = shift;
+    my $mask = shift;
+    # TODO
+    # 1. Unassociate $nick from all the chanels 
+    # 2. that's ut
 
 }
 
