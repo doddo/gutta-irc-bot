@@ -97,7 +97,7 @@ sub _join_nick_to_channel
     my $nick_data = shift; #<-- this is hash_ref...
 
     lock($self);
-    my $vars = $self->{channels};
+    my $vars = \%{$self->{channels}};
 
     unless (exists $$vars{$channel})
     {
@@ -120,7 +120,7 @@ sub _join_nick_to_channel
         $$nick_ref{$key} = $value;
     }
 
-    $log->error(Dumper($self->{ channels }{$channel}));
+    $log->trace(Dumper($self->{ channels }{$channel}));
 }
 
 
@@ -155,7 +155,6 @@ sub _set_nicks_for_channel
 
         $self->_join_nick_to_channel($nick, $channel, \%n);
     }
-    
 }
 
 sub get_nicks_from_channel
@@ -193,7 +192,6 @@ sub _process_join
 
     # then send the ref here
     $self->_join_nick_to_channel($nick, $channel, \%nick_data);
-
 }
 
 sub _process_part
@@ -207,8 +205,6 @@ sub _process_part
 
     lock($self);
     delete  $self->{channels}{$channel}{$nick};
-
-
 }
 
 sub _process_quit
@@ -216,11 +212,16 @@ sub _process_quit
     my $self = shift;
     my $nick = shift;
     my $mask = shift;
-    # TODO
     # 1. Unassociate $nick from all the chanels 
-    # 2. that's ut
-
+    # 2. that's it !!
+    
+    foreach my $channel (keys %{$self->{ channels }})
+    {
+        if (exists $self->{ channels }{ $channel }{ $nick })
+        {
+            $self->_process_part($nick, $mask, $channel);
+        }
+    }
 }
-
 
 1;
