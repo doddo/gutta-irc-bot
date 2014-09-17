@@ -106,17 +106,22 @@ sub _join_nick_to_channel
         $log->info("initialising $channel...");
     }
 
+    my $nicks = \%{$self->{ nicks }};
+
     unless (exists $$vars{$channel}{$nick})
     {
-        my %p: shared;
-        $$vars{$channel}{$nick} = \%p;
+        unless (exists $$nicks{$nick})
+        {
+            my %p: shared;
+            $$nicks{$nick} = \%p;
+        }
+        $$vars{$channel}{$nick} = \%{$$nicks{$nick}};
     }
     
     my $nick_ref = \%{$self->{ channels }{$channel}{$nick}};
 
     # Copying the found data over => the nickinfo for found channel.
     while ( my ($key, $value) = each(%$nick_data) ) {
-        $log->trace( "$key => $value");
         $$nick_ref{$key} = $value;
     }
 
@@ -146,6 +151,7 @@ sub _set_nicks_for_channel
         {
            $mode = $1; 
         }
+
         $log->info("'$nick' is joined to '$channel'...");
 
         my %n = (
