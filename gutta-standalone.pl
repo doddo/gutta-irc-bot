@@ -164,7 +164,8 @@ while (my $message = <$sock>)
         last;
     }
     elsif ($message =~ /433/) {
-        die "Nickname is already in use.";
+        $log->error("Nickname $own_nick is already in use.");
+        exit 2;
     }
     
     # Server could send pings here already or other msgs
