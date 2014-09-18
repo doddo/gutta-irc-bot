@@ -7,7 +7,7 @@ use warnings;
 use Data::Dumper;
 use Switch;
 use Getopt::Long qw(GetOptionsFromArray);
-my $log = Log::Log4perl->get_logger(__PACKAGE__);
+
 
 =head1 NAME
 
@@ -58,6 +58,9 @@ If is omitted, it will assume current channel.
   !op [ channel ] [ nick ]
 
 =cut
+
+
+my $log = Log::Log4perl->get_logger(__PACKAGE__);
 
 sub _initialise
 {
@@ -115,7 +118,8 @@ sub on_join
     my @payload = @_;    
 
     # they need someonw to aop
-    $log->info(Dumper(@payload));
+    $log->debug(Dumper(@payload));
+
 
     return "";
 }
@@ -233,11 +237,61 @@ sub __nickmod
         return "msg $target unable to compute; don't know what --channel...";
     }
 
+    # Figure out the mask of the target
+    #
+    # if $target_mask is passed as option, that is taken in preference of other
+    # Methods...
+    unless ($target_mask)
+    {
+        #
+        # Check if there is any record stored about nick in running session...
+        my $nickinfo = $self->{ session }->get_nick($target_nick);
+
+        if (exists $$nickinfo{ mask })
+        {
+            # Check if there's a hostmask entry for the nick..
+            $target_mask = $$nickinfo{ mask };
+            $log->debug("Found out that $target_nick has $target_mask");
+        } else {
+            return "msg $target I have no record about ${nick}'s hostmask...";
+        }
+
+    } else {
+        # TODO validate user input hostmask.
+    }
+
+
+
+
+
     # Gather system information about $nick.
-   
+    $log->debug (Dumper($self->__get_info_about_nick($target_nick, $target_mask)));
+        
 
+}
 
-    
+sub __get_info_about_nick
+{
+    my $self = shift;
+    my $nick = shift;
+    my $mask = shift;
+
+    my $dbh = $self->dbh();
+
+    my $sth = $dbh->prepare(qq{ 
+         SELECT nick,
+                mask,
+                channel,
+                lvl
+           FROM aops
+          WHERE nick = ?
+            AND mask = ?    
+    });
+
+    $sth->execute($nick, $mask);
+
+    return $sth->fetchall_hashref(qw/nick channel/);
+
 }
 
 1;
