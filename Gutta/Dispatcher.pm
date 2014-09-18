@@ -541,6 +541,13 @@ sub process_privmsg
                                # will be the nick instead. makes sense
                                # bcz privmsgs have no #channel, but should
                                # get the response instead,
+
+    # If someone on the irc says something, then that user will reveal its mask
+    # That's something which the $SESSION want's to know.
+    $SESSION->_set_nickinfo($nick, $mask, $target);
+
+
+
     my $cmdprefix = $self->{cmdprefix};
 
     my @responses; # return this.

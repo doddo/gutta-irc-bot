@@ -114,6 +114,7 @@ sub _join_nick_to_channel
         {
             my %p: shared;
             $$nicks{$nick} = \%p;
+            $log->debug("Learned about $nick for the first time...");
         }
         $$vars{$channel}{$nick} = \%{$$nicks{$nick}};
     }
@@ -122,7 +123,7 @@ sub _join_nick_to_channel
 
     # Copying the found data over => the nickinfo for found channel.
     while ( my ($key, $value) = each(%$nick_data) ) {
-        $$nick_ref{$key} = $value;
+        $$nick_ref{$key} = $value if $value;
     }
 
     $log->trace(Dumper($self->{ channels }{$channel}));
@@ -177,6 +178,36 @@ sub get_nicks_from_channel
     print Dumper($self->{ channels }{$channel});
 
     return keys %{ $self->{ channels }{ $channel } };
+}
+
+sub _set_nickinfo
+{
+    # add info about $nick ...
+    my $self = shift;
+    my $nick = shift;
+    my %n;
+    $n{mask} = shift;
+    $n{nick} = $nick;
+    my $target = shift;
+    
+
+    # Checking if target is a channel
+    # then we can åka snålskjuts på _join_nick_to_channel funktionen.
+    if ($target =~ /^#/)
+    {
+        $self->_join_nick_to_channel($nick, $target, \%n);
+    }
+
+    # OK TODO: fix so that regardless of target is a channel or not,
+    # that nick be registered anyway...
+}
+
+
+sub get_nickinfo
+{
+    my $self = shift;
+    my $nick = shift;
+    return $self->{ nicks }{$nick};
 }
 
 sub _process_join
