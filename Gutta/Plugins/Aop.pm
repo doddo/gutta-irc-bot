@@ -1,9 +1,10 @@
 package Gutta::Plugins::Aop;
-use parent Gutta::Plugin;
+use warnings;
+use parent 'Gutta::Plugin';
+use strict;
 use Gutta::Users;
 use Gutta::Session;
-use strict;
-use warnings;
+use Gutta::Plugins::Auth;
 use Data::Dumper;
 use Switch;
 use Getopt::Long qw(GetOptionsFromArray);
@@ -68,6 +69,8 @@ sub _initialise
     my $self = shift;
 
     $self->{ session } = Gutta::Session->instance();
+    $self->{ auth } = Gutta::Plugins::Auth->new();
+    $self->{ users } = Gutta::Users->new();
     $self->_dbinit(); 
 }
 
@@ -197,7 +200,7 @@ sub __nickmod
     my $target_mask;
     my $lvl;
 
-    GetOptionsDromArray(\@args,
+    GetOptionsFromArray(\@args,
           'channel=s' => \$channel,
               'lvl=i' => \$lvl,
              'mask=s' => \$target_mask)
@@ -206,7 +209,7 @@ sub __nickmod
     #
     # Has the user logged in to the system?
     #
-    return "msg $target please identify first." unless $self->has_session($nick, $mask); 
+    return "msg $target please identify first." unless $self->{ auth }->has_session($nick, $mask); 
 
     # Validate lvl if there is one.
     if ($lvl && ($lvl < 0 || $lvl > 100))
@@ -245,7 +248,7 @@ sub __nickmod
     {
         #
         # Check if there is any record stored about nick in running session...
-        my $nickinfo = $self->{ session }->get_nick($target_nick);
+        my $nickinfo = $self->{ session }->get_nickinfo($target_nick);
 
         if (exists $$nickinfo{ mask })
         {
@@ -260,13 +263,22 @@ sub __nickmod
         # TODO validate user input hostmask.
     }
 
+    # Check if $target_nick is registered ...
+    unless (my $registered_user = $self->{ users }->get_user($target_nick))
+    {
+        return "msg $target tell $target_nick hen needs to register first ...";
+    }
 
 
+    $log->info(sprintf 'regged user %s requested regged user %s with hostmask %s to be %s',
+                                    $nick, $target_nick, $target_mask, $subcmd);
 
-
-    # Gather system information about $nick.
-    $log->debug (Dumper($self->__get_info_about_nick($target_nick, $target_mask)));
+    # Gather system information about $target_nick.
+    $target_nickinfo = $self->__get_info_about_nick($target_nick, $target_mask);
+    $source_nickinfo = $self->__get_info_about_nick($nick, $mask);
+    # IS ADMIN?? $self->{ auth }->has_session($nick, $mask);   
         
+    return;
 
 }
 
@@ -280,8 +292,8 @@ sub __get_info_about_nick
 
     my $sth = $dbh->prepare(qq{ 
          SELECT nick,
-                mask,
                 channel,
+                mask,
                 lvl
            FROM aops
           WHERE nick = ?
@@ -290,7 +302,7 @@ sub __get_info_about_nick
 
     $sth->execute($nick, $mask);
 
-    return $sth->fetchall_hashref(qw/nick channel/);
+    return $sth->fetchall_hashref(qw/nick/);
 
 }
 
