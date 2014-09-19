@@ -446,7 +446,18 @@ sub get_jira_issue
 
     my $issue = from_json($response->decoded_content, { utf8 => 1 });
 
-    return sprintf("msg %s %s: %s (https://%s/issues/%s)", $target, $issue_id, $$issue{'fields'}{'summary'}, $url, $issue_id);
+
+    # Make sure there was a match.
+    if (defined $$issue{'fields'}{'summary'})
+    {
+        return sprintf("msg %s %s: %s (https://%s/issues/%s)", 
+            $target, $issue_id, $$issue{'fields'}{'summary'}, $url, $issue_id);
+    }
+    
+    # if not - don't return anything ...
+    return undef;
+
+
 }
 #
 #   work with jira users
