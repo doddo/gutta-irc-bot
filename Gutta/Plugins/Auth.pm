@@ -125,13 +125,14 @@ sub process_cmd
         {
             return "msg $nick OK - you are logged in until $expire_date";
         } else {
-            return "msg $nick SOZ, u are NOT logged in";
+            return "msg $nick you are NOT logged in";
         }
 
     } elsif ($command eq 'register') {
         return "msg $nick usage: register <password>" unless $rest_of_msg;
         my ($password, $email) = split /\s/, $rest_of_msg;
-        return $self->register_nick($nick, $nick, $password, $email);
+        return ($self->register_nick($nick, $nick, $password, $email),
+                $self->identify($nick, $nick, $password, $mask));
     } elsif ($command eq 'passwd') {
         return "msg $nick TODO: This feature is not programmed yet";
     } elsif ($command eq 'admin') {
