@@ -485,6 +485,7 @@ sub process_msg
         case /JOIN|PART/ { @irc_cmds = $self->process_join_or_part($server, $msgtype, @payload) }
               case '353' { @irc_cmds = $self->process_own_channel_join($server, @payload) }
              case 'QUIT' { @irc_cmds = $self->process_quit($server, @payload) }
+             case 'NICK' { @irc_cmds = $self->process_changed_nick($server, @payload) }
     }
 
     if ($msgtype)
@@ -654,6 +655,22 @@ sub process_privmsg
     # else just return it as is.
     return @responses;
 }
+
+sub process_changed_nick
+{
+    my $self = shift;
+    my $server = shift;
+    my $oldnick = shift;
+    my $mask = shift;
+    my $newnick = shift;
+
+    $log->debug("I just found out that $oldnick changed nick to $newnick.");
+
+    $SESSION->_process_changed_nick($oldnick,$mask,$newnick);
+
+    return;
+}
+
 
 sub process_join_or_part
 {

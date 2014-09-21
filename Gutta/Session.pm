@@ -123,7 +123,24 @@ sub _join_nick_to_channel
 
     # Copying the found data over => the nickinfo for found channel.
     while ( my ($key, $value) = each(%$nick_data) ) {
-        $$nick_ref{$key} = $value if $value;
+        # Here copy and updating. This is extra logic aded right here for good
+        # Logging purposes.
+        if (not defined $$nick_ref{$key} && defined $value)
+        {
+            # If a previously unknown attribute of a nick does get known to bot, then log it
+            # here, and update the nick with that information.
+            $log->debug(sprintf 'I just learned that %s has "%s"="%s"', $nick, $key, $value);
+            $$nick_ref{$key} = $value;
+        } else {
+            if ($$nick_ref{$key} ne $value && defined $value)
+            {
+                # If a value which is already known changes for some reason, then log it here, and 
+                # update with this new information, while at the same time logging the old value.
+                $log->debug(sprintf 'I just learned that %s\'s %s have changed from  "%s" to "%s"',
+                                                              $nick, $key, $$nick_ref{$key}, $value);
+                $$nick_ref{$key} = $value;
+            } 
+        }
     }
 
     $log->trace(Dumper($self->{ channels }{$channel}));
@@ -146,7 +163,7 @@ sub _set_nicks_for_channel
     {
         my $op = 0;
         my $voice = 0;
-        my $mode;
+        my $mode = 0;
         # Check if nick is an operator or has voice
         if ($nick =~ s/^([+@])//)
         {
@@ -230,6 +247,62 @@ sub _process_join
     # then send the ref here
     $self->_join_nick_to_channel($nick, $channel, \%nick_data);
 }
+
+sub _process_changed_nick
+{
+    # Called by Gutta::Dispatcher when someone changes nick.
+    my $self = shift;
+    my $oldnick = shift;
+    my $mask = shift;
+    my $newnick = shift;
+
+    # Lock self
+    lock($self);
+
+    # create a hash and put known data in there.
+    my %nick_data = (
+       nick => $newnick,
+       mask => $mask,
+    );
+
+    my $nicks = \%{ $self->{nicks} };
+
+    # 1st check if old nick is there.
+    unless (exists $$nicks{ $oldnick })
+    {
+        # then what about new nick? 
+        unless (exists $$nicks{$newnick})
+        {
+            # OK, simply add new nick to $self->{ nicks }.
+            share %nick_data;
+            $$nicks{$newnick} = \%nick_data;
+            $log->debug("Learned about $newnick (previously known as $oldnick) for the first time...");
+        }
+       
+    } else {
+        # OK old nick *was* there, so copy it over to new nick, and then delete.
+        if (exists $$nicks{ $newnick })
+        {
+            # here is a special situation where both the old nick, the one nick
+            # changed from, and the new nick is both defined already. That is a little bit special.
+            $log->error("$newnick is known to me already, so how can $oldnick change nick to it?");
+            delete ($$nicks{ $oldnick });
+        }
+
+        $log->info ("Processing nick change for $oldnick to new nick $newnick...");
+        # Copy the key, newnick references oldnick
+        $$nicks{$newnick} = $$nicks{ $oldnick };
+
+        # then remove the oldnick ref.
+        delete ($$nicks{ $oldnick });
+
+        # and put the newest data in the newnick..
+        $$nicks{$newnick}{ nick } = $newnick;
+        $$nicks{$newnick}{ mask } = $mask;
+    }
+}
+
+
 
 sub _process_part
 {

@@ -41,6 +41,7 @@ sub new
             'PING' => sub { $self->parse_ping(@_) },
             'JOIN' => sub { $self->parse_joined_channel(@_) },
             'PART' => sub { $self->parse_parted_channel(@_) },
+            'NICK' => sub { $self->parse_changed_nick(@_) },
             'QUIT' => sub { $self->parse_userquit(@_) },
  
     );
@@ -231,6 +232,19 @@ sub parse_parted_channel
     return $+{nick}, $+{mask}, $+{channel};
 }
 
+sub parse_changed_nick
+{
+    my $self = shift;
+    $_ = shift;
+    # :petter1!~petter@192.168.10.27 NICK :OLLE
+    m/^:(?<oldnick>[^!]++)! # nick before change
+           (?<mask>\S++)\s  # get the hostmask
+                    NICK\s  # MSG type
+                         :  
+     (?<newnick>[^\s]++)\s  # nick after change /x;
+
+    return $+{oldnick}, $+{mask}, $+{newnick};
+}
 
 
 sub parse_470_forwarded_to_other_channel
