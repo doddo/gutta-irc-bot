@@ -1,6 +1,6 @@
 package Gutta::Plugins::Aop;
 use warnings;
-use parent 'Gutta::Plugin';
+use parent 'Gutta::Plugins::Auth';
 use strict;
 use Gutta::Users;
 use Gutta::Session;
@@ -82,14 +82,13 @@ sub _setup_shema
     my @queries  = (qq{
     CREATE TABLE IF NOT EXISTS aops (
                nick TEXT NOT NULL,
-               mask TEXT NOT NULL,
             channel TEXT NOT NULL,
                 lvl INTEGER,
     FOREIGN KEY(nick) REFERENCES users(nick),
       CONSTRAINT nick_per_chan UNIQUE (nick, channel)
     )});
 
-    return @queries;
+    return ($self->SUPER::_setup_shema(), @queries);
 }
 
 sub _event_handlers
@@ -256,7 +255,7 @@ sub __nickmod
             $target_mask = $$nickinfo{ mask };
             $log->debug("Found out that $target_nick has $target_mask");
         } else {
-            return "msg $target I have no record about ${nick}'s hostmask...";
+            return "msg $target I have no record about ${target_nick}'s hostmask...";
         }
 
     } else {
@@ -274,8 +273,8 @@ sub __nickmod
                                     $nick, $target_nick, $target_mask, $subcmd);
 
     # Gather system information about $target_nick.
-    $target_nickinfo = $self->__get_info_about_nick($target_nick, $target_mask);
-    $source_nickinfo = $self->__get_info_about_nick($nick, $mask);
+    my $target_nickinfo = $self->__get_info_about_nick($target_nick, $target_mask);
+    my $source_nickinfo = $self->__get_info_about_nick($nick, $mask);
     # IS ADMIN?? $self->{ auth }->has_session($nick, $mask);   
         
     return;
