@@ -1,5 +1,5 @@
 package Gutta::Plugins::Auth;
-use parent Gutta::Plugin;
+use parent 'Gutta::Plugin';
 # A special plugin to handle authentication.
 
 use strict;
