@@ -246,15 +246,17 @@ sub _set_nickinfo
     my $target = shift;
     
 
-    # Checking if target is a channel
-    # then we can åka snålskjuts på _join_nick_to_channel funktionen.
+    # Figure out best way to update info about $nick ...
     if ($target =~ /^#/)
     {
-        $self->_join_nick_to_channel($nick, $target, \%n);
-    }
+         # Checking if target is a channel
+         # then we can åka snålskjuts på _join_nick_to_channel funktionen.
+         $self->_join_nick_to_channel($nick, $target, \%n);
+    } 
+    
+    $self->_update_nick($nick, \%n);
 
-    # OK TODO: fix so that regardless of target is a channel or not,
-    # that nick be registered anyway...
+
 }
 
 
@@ -295,8 +297,6 @@ sub _process_changed_nick
     my $newnick = shift;
 
     my @chans2fix;
-
-    my %c;
 
     # Lock self
     lock($self);
