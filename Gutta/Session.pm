@@ -84,6 +84,50 @@ sub get_plugin_commands
     return $self->{ plugincontext }->{ 'commands' };
 }
 
+sub _update_nick
+{
+    # update or add nick information about nick.
+    #   
+
+    my $self = shift;
+    my $nick = shift;
+    my $nick_data = shift; # <-- this is hash ref...
+
+    lock($self);
+    my $nicks = \%{$self->{ nicks }};
+
+    unless (exists $$nicks{$nick})
+    {
+        # Add new info about this nick ...
+        my %p :shared;
+        $$nicks{$nick} = \%p;
+        $log->debug("Learned about $nick for the first time...");
+    }
+    my $nick_ref = \%{$self->{ nicks }{$nick}};
+    while ( my ($key, $value) = each(%$nick_data) ) {
+        # Here copy and updating. This is extra logic aded right here for good
+        # Logging purposes.
+        if (not defined $$nick_ref{$key} && defined $value)
+        {
+            # If a previously unknown attribute of a nick does get known to bot, then log it
+            # here, and update the nick with that information.
+            $log->debug(sprintf 'I just learned that %s has "%s"="%s"', $nick, $key, $value);
+            $$nick_ref{$key} = $value;
+        } else {
+            if ($$nick_ref{$key} ne $value && defined $value && $value ne 'mode')
+            {
+                # If a value which is already known changes for some reason, then log it here, and 
+                # update with this new information, while at the same time logging the old value.
+                $log->debug(sprintf 'I just learned that %s\'s %s have changed from  "%s" to "%s"',
+                                                              $nick, $key, $$nick_ref{$key}, $value);
+                $$nick_ref{$key} = $value;
+            } 
+        }
+    }
+}
+
+
+
 sub _join_nick_to_channel
 {
     #  Associates a nick with a channel.
@@ -103,47 +147,41 @@ sub _join_nick_to_channel
     {
         my %p: shared;
         $$vars{$channel} = \%p;
-        $log->info("initialising $channel...");
+        $log->info("learned about channel $channel for the first time...");
     }
-
-    my $nicks = \%{$self->{ nicks }};
 
     unless (exists $$vars{$channel}{$nick})
     {
-        unless (exists $$nicks{$nick})
+        my %p: shared;
+        $log->debug("adding $nick  to $channel...");
+        $$vars{$channel}{$nick} = \%p;
+        unless (exists $self->{ nicks }{ $nick })
         {
-            my %p: shared;
-            $$nicks{$nick} = \%p;
-            $log->debug("Learned about $nick for the first time...");
+            # OK  create a nick entry if none is  already...
+            $self->_update_nick($nick, $nick_data);
         }
-        $$vars{$channel}{$nick} = \%{$$nicks{$nick}};
     }
     
     my $nick_ref = \%{$self->{ channels }{$channel}{$nick}};
 
-    # Copying the found data over => the nickinfo for found channel.
-    while ( my ($key, $value) = each(%$nick_data) ) {
-        # Here copy and updating. This is extra logic aded right here for good
-        # Logging purposes.
-        if (not defined $$nick_ref{$key} && defined $value)
+    # Copying some interesting data in here, like whether nick is op or no...
+    if (defined $$nick_data{'mode'})
+    {
+        unless ($$nick_ref{'mode'})
         {
-            # If a previously unknown attribute of a nick does get known to bot, then log it
-            # here, and update the nick with that information.
-            $log->debug(sprintf 'I just learned that %s has "%s"="%s"', $nick, $key, $value);
-            $$nick_ref{$key} = $value;
+            $$nick_ref{'mode'} = $$nick_data{'mode'};
+            $log->debug("I just learned that on channel $channel, $nick has mode $$nick_ref{'mode'}");
+        } elsif ($$nick_data{'mode'} ne $$nick_ref{'mode'}) {
+            $log->debug("I just learned that on channel $channel, $nick has changed  mode from $$nick_ref{'mode'} to $$nick_data{'mode'}");
+            $$nick_ref{'mode'} = $$nick_data{'mode'};
         } else {
-            if ($$nick_ref{$key} ne $value && defined $value)
-            {
-                # If a value which is already known changes for some reason, then log it here, and 
-                # update with this new information, while at the same time logging the old value.
-                $log->debug(sprintf 'I just learned that %s\'s %s have changed from  "%s" to "%s"',
-                                                              $nick, $key, $$nick_ref{$key}, $value);
-                $$nick_ref{$key} = $value;
-            } 
+
+            $log->debug("Nothing new for $nick on $channel...");
         }
+        
     }
 
-    $log->trace(Dumper($self->{ channels }{$channel}));
+    #$log->debug(Dumper($self->{ channels }{$channel}));
 }
 
 
@@ -256,6 +294,10 @@ sub _process_changed_nick
     my $mask = shift;
     my $newnick = shift;
 
+    my @chans2fix;
+
+    my %c;
+
     # Lock self
     lock($self);
 
@@ -265,40 +307,59 @@ sub _process_changed_nick
        mask => $mask,
     );
 
-    my $nicks = \%{ $self->{nicks} };
-
-    # 1st check if old nick is there.
-    unless (exists $$nicks{ $oldnick })
+    # Figure out what channels the nick is joined to...
+    foreach my $channel ( keys %{ $self->{ channels } } )
     {
-        # then what about new nick? 
-        unless (exists $$nicks{$newnick})
+        if ( $self->{ channels }{ $channel }{ $oldnick } )
         {
-            # OK, simply add new nick to $self->{ nicks }.
-            share %nick_data;
-            $$nicks{$newnick} = \%nick_data;
-            $log->debug("Learned about $newnick (previously known as $oldnick) for the first time...");
+            # Found a channel here, so this needs to be updated.
+            # this is because we have to keep copies of each nick so that they
+            # can have different attribs like, op on different chans etc.
+            $log->debug("Gonan need to update nick change for $oldnick on $channel ...");
+            push ( @chans2fix, \%{ $self->{ channels }{ $channel } } );
         }
-       
-    } else {
-        # OK old nick *was* there, so copy it over to new nick, and then delete.
-        if (exists $$nicks{ $newnick })
+    }
+
+    # 
+    # OK, good, then update all references, renaming oldnick to newnick.
+    #  AND of course, start with the nicks reference to nick ...
+    #
+
+    foreach my $nickdata (\%{ $self->{ nicks } }, @chans2fix)
+    {
+        # 1st check if old nick is there.
+        unless (exists $$nickdata{ $oldnick })
         {
-            # here is a special situation where both the old nick, the one nick
-            # changed from, and the new nick is both defined already. That is a little bit special.
-            $log->error("$newnick is known to me already, so how can $oldnick change nick to it?");
-            delete ($$nicks{ $oldnick });
+            # then what about new nick? 
+            unless (exists $$nickdata{$newnick})
+            {
+                # OK, simply add new nick to $self->{ nickdata }.
+                share %nick_data;
+                $$nickdata{$newnick} = \%nick_data;
+                $log->debug("Learned about $newnick (previously known as $oldnick) for the first time...");
+            }
+           
+        } else {
+            # OK old nick *was* there, so copy it over to new nick, and then delete.
+            if (exists $$nickdata{ $newnick })
+            {
+                # here is a special situation where both the old nick, the one nick
+                # changed from, and the new nick is both defined already. That is a little bit special.
+                $log->error("$newnick is known to me already, so how can $oldnick change nick to it?");
+                delete ($$nickdata{ $oldnick });
+            }
+    
+            $log->debug("Processing nick change on $nickdata for $oldnick to new nick $newnick...");
+            # Copy the key, newnick references oldnick
+            $$nickdata{$newnick} = $$nickdata{ $oldnick };
+    
+            # then remove the oldnick ref.
+            delete ($$nickdata{ $oldnick });
+    
+            # and put the newest data in the newnick..
+            $$nickdata{$newnick}{ nick } = $newnick;
+            $$nickdata{$newnick}{ mask } = $mask;
         }
-
-        $log->info ("Processing nick change for $oldnick to new nick $newnick...");
-        # Copy the key, newnick references oldnick
-        $$nicks{$newnick} = $$nicks{ $oldnick };
-
-        # then remove the oldnick ref.
-        delete ($$nicks{ $oldnick });
-
-        # and put the newest data in the newnick..
-        $$nicks{$newnick}{ nick } = $newnick;
-        $$nicks{$newnick}{ mask } = $mask;
     }
 }
 

@@ -545,8 +545,10 @@ sub process_privmsg
 
     # If someone on the irc says something, then that user will reveal its mask
     # That's something which the $SESSION want's to know.
-    $SESSION->_set_nickinfo($nick, $mask, $target);
-
+    eval {
+        $SESSION->_set_nickinfo($nick, $mask, $target);
+    };
+    $log->error("failed to set nickinfo about $nick: $@") if $@;
 
 
     my $cmdprefix = $self->{cmdprefix};
@@ -665,8 +667,11 @@ sub process_changed_nick
     my $newnick = shift;
 
     $log->debug("I just found out that $oldnick changed nick to $newnick.");
+    eval {
+        $SESSION->_process_changed_nick($oldnick,$mask,$newnick);
+    };
+    $log->error("failed to process nick change for $oldnick to $newnick: $@") if $@;
 
-    $SESSION->_process_changed_nick($oldnick,$mask,$newnick);
 
     return;
 }
@@ -683,12 +688,15 @@ sub process_join_or_part
 
     $log->debug("I just found out that $nick $what:ed $channel on $server.");
 
-    if ($what eq 'JOIN')
-    {
-        $SESSION->_process_join($nick,$mask,$channel);
-    } elsif ($what eq 'PART') {
-        $SESSION->_process_part($nick,$mask,$channel);
-    }
+    eval {
+        if ($what eq 'JOIN')
+        {
+            $SESSION->_process_join($nick,$mask,$channel);
+        } elsif ($what eq 'PART') {
+            $SESSION->_process_part($nick,$mask,$channel);
+        }
+    };
+    $log->error("failed to process $what for $nick on  $channel: $@") if $@;
 
     return;
 }
