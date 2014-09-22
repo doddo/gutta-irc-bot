@@ -393,6 +393,11 @@ sub _process_quit
             $self->_process_part($nick, $mask, $channel);
         }
     }
+
+    lock($self);
+    $log->info("Deleting nickdata about QUIT:ed $nick ...");
+    delete  $self->{ nicks }{$nick};
+
 }
 
 1;
