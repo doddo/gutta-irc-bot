@@ -1,8 +1,7 @@
 package Gutta::Session;
 use warnings;
 use strict;
-use vars qw(@ISA);
-our @ISA = qw(Class::Singleton);
+use parent 'Class::Singleton';
 
 use Data::Dumper;
 
