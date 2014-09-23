@@ -395,7 +395,7 @@ sub _process_quit
     }
 
     lock($self);
-    $log->info("Deleting nickdata about QUIT:ed $nick ...");
+    $log->info("handled $nick QUIT.");
     delete  $self->{ nicks }{$nick};
 
 }

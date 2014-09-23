@@ -6,8 +6,8 @@ use Gutta::Users;
 use Gutta::Session;
 use Gutta::Plugins::Auth;
 use Data::Dumper;
-use Switch;
 use Getopt::Long qw(GetOptionsFromArray);
+use v5.14;
 
 
 =head1 NAME
@@ -26,10 +26,10 @@ upon request.
 
 =head1 aop
 
-Handle aop:ing the incoming nick. aop:s get op.
+Handle aop:ing the incoming nick. aop:s get op, but first they need to !register.
 
 
-  !aop [ info | [ add | del | modify ] NICK [ --channel C ] [ --lvl INT ] [ --mask M ]] 
+  !aop [ info | [ add | del | modify ] NICK [ --channel C ] [ --lvl INT ] ] 
 
 =over 8
 
@@ -41,12 +41,6 @@ What channel (if in a channel and ommitted, will assume it current channel)
 
 The level is a number between 0-100. an aop can only add someone with less level
 than itself has. A number above 1 means that the user will be oped, (but can't op)
-
-=item B<--mask>
-
-If the bot doesn't know what hostmask is associated with a nick, or the user
-has not registered with register command and is identified, the mask must be 
-manually sent to bot, with the --mask opt.
 
 =back
 
@@ -86,7 +80,16 @@ sub _setup_shema
                 lvl INTEGER,
     FOREIGN KEY(nick) REFERENCES users(nick),
       CONSTRAINT nick_per_chan UNIQUE (nick, channel)
-    )});
+    )}, qq{
+    CREATE VIEW IF NOT EXISTS aop_sessions AS 
+            SELECT a.nick,
+                   a.mask,
+                   b.channel,
+                   b.lvl
+              FROM sessions a
+        INNER JOIN aops b
+                ON a.nick = b.nick
+    });
 
     return ($self->SUPER::_setup_shema(), @queries);
 }
@@ -196,13 +199,11 @@ sub __nickmod
     # Parse options...
     my $channel;
     my $level;
-    my $target_mask;
     my $lvl;
 
     GetOptionsFromArray(\@args,
           'channel=s' => \$channel,
-              'lvl=i' => \$lvl,
-             'mask=s' => \$target_mask)
+              'lvl=i' => \$lvl)
     or return "invalid options supplied";
 
     #
@@ -239,28 +240,6 @@ sub __nickmod
         return "msg $target unable to compute; don't know what --channel...";
     }
 
-    # Figure out the mask of the target
-    #
-    # if $target_mask is passed as option, that is taken in preference of other
-    # Methods...
-    unless ($target_mask)
-    {
-        #
-        # Check if there is any record stored about nick in running session...
-        my $nickinfo = $self->{ session }->get_nickinfo($target_nick);
-
-        if (exists $$nickinfo{ mask })
-        {
-            # Check if there's a hostmask entry for the nick..
-            $target_mask = $$nickinfo{ mask };
-            $log->debug("Found out that $target_nick has $target_mask");
-        } else {
-            return "msg $target I have no record about ${target_nick}'s hostmask...";
-        }
-
-    } else {
-        # TODO validate user input hostmask.
-    }
 
     # Check if $target_nick is registered ...
     unless (my $registered_user = $self->{ users }->get_user($target_nick))
@@ -269,15 +248,73 @@ sub __nickmod
     }
 
 
-    $log->info(sprintf 'regged user %s requested regged user %s with hostmask %s to be %s',
-                                    $nick, $target_nick, $target_mask, $subcmd);
+    $log->info(sprintf 'regged user %s requested regged user %s to be %s',
+                                                $nick, $target_nick,  $subcmd);
 
     # Gather system information about $target_nick.
-    my $target_nickinfo = $self->__get_info_about_nick($target_nick, $target_mask);
-    my $source_nickinfo = $self->__get_info_about_nick($nick, $mask);
-    # IS ADMIN?? $self->{ auth }->has_session($nick, $mask);   
+    my $target_nickinfo = $self->__get_info_about_nick($target_nick, $channel);
+    my $source_nickinfo;
+
+
+    #
+    # Here comes some validation for the request.
+    #
+    my $authorized_request = 0;
+    #
+    # First, check if the user requesting action is an admin
+    if ($self->{ users }->is_admin_with_session($nick, $mask))
+    {
+        $log->info("User $nick is an administrator, will accept request to aop $subcmd $target_nick on $channel...");
+        $authorized_request = 1;
+
+    } else {
+        # OK the user was not an admin, so what lvl is it? 
+        $source_nickinfo = $self->__get_info_about_nick($nick, $channel);
+        $log->debug(Dumper(%{$source_nickinfo}));
+
+        my $slev = $$source_nickinfo{$nick}{$lvl} ||0;
+        my $tlev = $$target_nickinfo{$target_nick}{$lvl} ||0;
+
+
+        # If the source lvl (the lvl of requestor) is less than requested lvl, or less
+        # than that of target, then reject this request...
+        if ($slev < $lvl || $slev < $tlev)
+        {
+            return "msg $target $nick, sorry, but you don't have enough lvl to do that";
+        } elsif ((not $$target_nickinfo{ $target_nick }) 
+            and ($subcmd eq 'modify')) {
+            # here's the check to see if you try to modify nonexistant nick for channel.
+            return "msg $target $nick, $nick is not in the list for $channel...";
+        }
+    }
+
+    # OK so here perform action!!
+    if ($authorized_request == 1)
+    {
+        my $q;
+        $lvl||=0;
+        for ($subcmd)
+        {
+              when ('add') { $q = 'INSERT INTO aops (lvl, nick, channel) VALUES (?,?,?)' }
+              when ('del') { $q = 'DELETE FROM aops WHERE -1 != ? AND nick = ? AND channel = ?' }
+           when ('modify') { $q = 'UPDATE aops set lvl = ? WHERE nick = ? AND channel = ?' }
+        }
         
-    return;
+        my $dbh = $self->dbh();
+        my $sth = $dbh->prepare($q);
+
+        if($sth->execute($lvl, $target_nick, $channel))
+        {
+            return "msg $target, OK $nick, I did $subcmd with $target_nick";
+        } else {
+            return "msg $target $nick: Unable to comply:" . (split("\n", $dbh->errstr))[0];
+        }
+
+
+    }
+
+
+    return ;
 
 }
 
@@ -285,21 +322,20 @@ sub __get_info_about_nick
 {
     my $self = shift;
     my $nick = shift;
-    my $mask = shift;
+    my $channel= shift;
 
     my $dbh = $self->dbh();
 
     my $sth = $dbh->prepare(qq{ 
          SELECT nick,
-                channel,
-                mask,
-                lvl
-           FROM aops
-          WHERE nick = ?
-            AND mask = ?    
+                lvl,
+                mask
+           FROM aop_sessions
+          WHERE nick = ? 
+            AND channel = ?
     });
 
-    $sth->execute($nick, $mask);
+    $sth->execute($nick, $channel);
 
     return $sth->fetchall_hashref(qw/nick/);
 
