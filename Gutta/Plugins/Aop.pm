@@ -144,7 +144,7 @@ sub process_cmd
     my @responses;
     my @rest_of_msg;
     my $subcmd;
-    my $target_nick;
+    my $target_n_or_c;
 
     # Possble subcmd...
     if ($rest_of_msg)
@@ -152,7 +152,7 @@ sub process_cmd
         ($subcmd, @rest_of_msg) = split(' ',$rest_of_msg);
         if (@rest_of_msg)
         {
-            $target_nick = shift(@rest_of_msg);
+            $target_n_or_c = shift(@rest_of_msg)||undef;
         }
     }
 
@@ -161,10 +161,37 @@ sub process_cmd
     {
         $self->__handle_op($nick, $mask, $target, @rest_of_msg);
     } elsif ($cmd eq 'aop'){
-        if ($subcmd ~~ ["add", "del", "modify"])
+        if ($subcmd ~~ ['add', 'del', 'modify'])
         {
             push @responses, 
-                $self->__nickmod($subcmd, $nick, $mask, $target, $target_nick, @rest_of_msg);
+                      $self->__nickmod($subcmd, $nick, $mask, $target, $target_n_or_c, @rest_of_msg);
+        } elsif ($subcmd eq 'list'){
+             
+            my $channel;
+
+            if ($target_n_or_c and $target_n_or_c =~ m/^#/){
+                $channel = $target_n_or_c;
+            } elsif ($target =~ m/^#/){
+                $channel = $target;
+            } else {
+               return "msg $target invalid channel supplied...";
+            }
+        
+            my $nicklist = $self->__listaops($channel);
+
+            if ($nicklist)
+            {
+                push @responses, "msg $target LIST FOR $channel:";
+
+                # Sort by lvl here.
+                my @keys = sort { $nicklist->{$b}->{ lvl } <=> 
+                                  $nicklist->{$a}->{ lvl } } keys(%$nicklist);
+
+                foreach my $n (@{$nicklist}{@keys})
+                {
+                    push @responses, sprintf "msg %s %-15s %-3i", $target, $$n{nick}, $$n{lvl};
+                }
+            }
         }
     }
 
@@ -204,7 +231,7 @@ sub __nickmod
     GetOptionsFromArray(\@args,
           'channel=s' => \$channel,
               'lvl=i' => \$lvl)
-    or return "invalid options supplied";
+    or return "msg $target invalid options supplied";
 
     #
     # Has the user logged in to the system?
@@ -272,20 +299,22 @@ sub __nickmod
         $source_nickinfo = $self->__get_info_about_nick($nick, $channel);
         $log->debug(Dumper(%{$source_nickinfo}));
 
-        my $slev = $$source_nickinfo{$nick}{$lvl} ||0;
-        my $tlev = $$target_nickinfo{$target_nick}{$lvl} ||0;
+        my $slev = $$source_nickinfo{$nick}{lvl}||0;
+        my $tlev = $$target_nickinfo{$target_nick}{lvl}||0;
 
 
         # If the source lvl (the lvl of requestor) is less than requested lvl, or less
         # than that of target, then reject this request...
-        if ($slev < $lvl || $slev < $tlev)
+        if ($slev <= $lvl || $slev <= $tlev)
         {
+            $log->info("rejected try to $subcmd $target_nick($tlev) by $nick($slev) to $lvl on $channel");
             return "msg $target $nick, sorry, but you don't have enough lvl to do that";
         } elsif ((not $$target_nickinfo{ $target_nick }) 
             and ($subcmd eq 'modify')) {
             # here's the check to see if you try to modify nonexistant nick for channel.
             return "msg $target $nick, $nick is not in the list for $channel...";
         }
+        $authorized_request = 1;
     }
 
     # OK so here perform action!!
@@ -338,7 +367,26 @@ sub __get_info_about_nick
     $sth->execute($nick, $channel);
 
     return $sth->fetchall_hashref(qw/nick/);
+}
 
+sub __listaops
+{
+    my $self = shift;
+    my $channel = shift;
+
+    my $dbh = $self->dbh();
+
+    my $sth = $dbh->prepare(qq{
+         SELECT nick,
+                lvl
+           FROM aops
+          WHERE channel = ?
+       ORDER BY lvl DESC
+    });
+
+    $sth->execute($channel);
+
+    return $sth->fetchall_hashref(qw/nick/);
 }
 
 1;
