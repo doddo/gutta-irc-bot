@@ -7,7 +7,7 @@ use Gutta::Session;
 use Gutta::Plugins::Auth;
 use Data::Dumper;
 use Getopt::Long qw(GetOptionsFromArray);
-use v5.14;
+use v5.10;
 
 
 =head1 NAME
