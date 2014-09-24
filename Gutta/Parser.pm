@@ -103,8 +103,10 @@ sub parse_response
     {
        next unless $msg;
        $msg =~ s/^msg (\S+) /PRIVMSG $1 :/i;
-       $msg =~ s/^me (\S+) /PRIVMSG $1 :\001ACTION /i;
-       $msg =~ s/^action (\S+) /PRIVMSG $1 :\001ACTION /i;
+       # .....6..:kalle!~petter@192.168.10.27 MODE #slask -o kalle 
+       $msg =~ s/^mode (\S+) /MODE $1 /i;
+       $msg =~ s/^me (\S+) /PRIVMSG $1 :\001ACTION \001/i;
+       $msg =~ s/^action (\S+) /PRIVMSG $1 :\001ACTION \001/i;
        $msg .= "\r\n";
        push @out_msgs, $msg;
     }

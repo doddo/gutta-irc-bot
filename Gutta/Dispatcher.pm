@@ -387,7 +387,8 @@ sub plugin_worker
             eval {
                 if ($PLUGINS{$plugin_ref}->can('handle_event'))
                 {
-                    $PLUGINS{$plugin_ref}->handle_event($eventtype, $timestamp,  $server, @payload);
+                    push @responses, 
+                      $PLUGINS{$plugin_ref}->handle_event($eventtype, $timestamp,  $server, @payload);
                 }
 
             };
