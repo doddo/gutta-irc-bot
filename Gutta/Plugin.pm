@@ -1,13 +1,15 @@
 package Gutta::Plugin;
 use Gutta::DBI;
-use Gutta::Context;
+use Gutta::Constants qw/DATADIR/;
 use Storable;
 use strict;
 use warnings;
 use DateTime;
 use Log::Log4perl;
+use File::Basename;
 
-my $log;
+
+my $log = Log::Log4perl->get_logger(__PACKAGE__);
 
 sub new
 {
@@ -18,7 +20,6 @@ sub new
      heartbeat_act_s => 58,   # default act on heartbeats ~ every 58 secs.
     heartbeat_act_ts => time, # Setting timestamp "time is now"
                   db => Gutta::DBI->instance(),
-             context => Gutta::Context->new(),
     }, $class;
 
     $self->__setup_config_shema();
@@ -47,8 +48,6 @@ sub _initialise
     my $self = shift;
     #$self->{triggers} = $self->_triggers();
     #$self->{commands} = $self->_commands();
-
-    $self->{datafile} = "Gutta/Data/" . __PACKAGE__ . ".data",
 
     # The logger
     $log = Log::Log4perl->get_logger(__PACKAGE__);
@@ -117,15 +116,24 @@ sub load
 {
     # load $self->{data} from file
     my $self = shift;
+
+    $self->{ datafile } ||= catfile(DATADIR, scalar (caller(0)) . '.data');
+
+
     $self->save() unless -f $self->{datafile};
+    $log->debug("loading datafile:" . $self->{ datafile });
     $self->{data} = retrieve($self->{datafile});
 
 }
 
 sub save
 {
-    # save $self->{data} to file
     my $self = shift;
+    # save $self->{data} to file
+    $self->{ datafile } ||= catfile(DATADIR, scalar (caller(0)) . '.data');
+
+    $log->debug("saving datafile:" . $self->{ datafile });
+
     store \%{$self->{data}}, $self->{datafile};
 }
 
