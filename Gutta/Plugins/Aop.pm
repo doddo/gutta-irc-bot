@@ -259,7 +259,7 @@ sub __handle_op
         $target_nick = $nick;
     }
 
-    my $target_channel = shift;
+    $target_channel = shift;
     unless ($target_channel)
     {
         $log->debug("Unspecified channel to OP $nick on, assuming origin $target");

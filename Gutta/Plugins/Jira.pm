@@ -1,7 +1,7 @@
 package Gutta::Plugins::Jira;
 # does something with Jira
 
-use parent Gutta::Plugin;
+use parent 'Gutta::Plugin';
 
 use HTML::Strip;
 use LWP::UserAgent;

@@ -15,7 +15,7 @@ Handles replies for CTCP messages like PING, VERSION etc.
 =cut
 
 
-use parent Gutta::Plugin;
+use parent 'Gutta::Plugin';
 use Gutta::Constants;
 use strict;
 use warnings;

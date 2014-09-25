@@ -1,7 +1,7 @@
 package Gutta::Plugins::Slap;
 # can slap with this one
 
-use parent Gutta::Plugin;
+use parent 'Gutta::Plugin';
 
 sub slap
 {

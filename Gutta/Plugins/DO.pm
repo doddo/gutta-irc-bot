@@ -2,7 +2,7 @@ package Gutta::Plugins::DO;
 # Allows admins to make bot run irc commands
 #
 use Gutta::Users;
-use parent Gutta::Plugin;
+use parent 'Gutta::Plugin';
 
 use strict;
 use warnings;

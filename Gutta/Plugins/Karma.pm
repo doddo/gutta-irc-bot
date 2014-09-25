@@ -1,5 +1,5 @@
 package Gutta::Plugins::Karma;
-use parent Gutta::Plugin;
+use parent 'Gutta::Plugin';
 use Gutta::DBI;
 use Data::Dumper;
 # A module to to manage karma

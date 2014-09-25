@@ -4,7 +4,7 @@ package Gutta::Plugins::Help;
 use Pod::Usage;
 require Pod::Select;
 use Data::Dumper;
-use parent Gutta::Plugin;
+use parent 'Gutta::Plugin';
 use strict;
 use warnings;
 use Gutta::Session;

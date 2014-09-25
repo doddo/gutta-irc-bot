@@ -1,7 +1,7 @@
 package Gutta::Plugins::Ibood;
 # does something with Ibood
 
-use parent Gutta::Plugin;
+use parent 'Gutta::Plugin';
 use LWP::Simple;
 use HTML::TokeParser;
 

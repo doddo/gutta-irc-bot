@@ -1,7 +1,7 @@
 package Gutta::Plugins::Nagios;
 # does something with Nagios
 
-use parent Gutta::Plugin;
+use parent 'Gutta::Plugin';
 use Gutta::Color;
 
 use HTML::Strip;

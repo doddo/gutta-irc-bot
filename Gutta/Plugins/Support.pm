@@ -1,6 +1,6 @@
 package Gutta::Plugins::Support;
 
-use parent Gutta::Plugins::Jira;
+use parent 'Gutta::Plugins::Jira';
 
 use Data::Dumper;
 use JSON;
