@@ -18,12 +18,18 @@ Gutta::Session
 
 =head1 SYNOPSIS
 
-Holds info which is shared between classes etc. This gonan replace Gutta::Context
+Holds global run-time info.
 
 
 =head1 DESCRIPTION
 
-Most of the things known by gutta will be stored here for later use.
+As soon as the bot finds out something which may be of use to for example plugins, it is kept here.
+
+This can be for example what plugins are loaded, what channels are joined, what nicks are on those
+channels and what modes the nicks have on the channels joined.
+
+As soon as new info is found out, such as hostmask, or someone joins or parts, the Session data 
+gets updated with this new information.
 
 =cut
 

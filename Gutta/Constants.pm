@@ -40,7 +40,6 @@ use constant     CONFIGDIR => catdir(GUTTADIR, 'Config');
 
 # Files
 use constant        DBFILE => catfile(DATADIR, 'gutta.db');
-use constant SESSIONDBFILE => catfile(DATADIR, "session_$$.db");
 use constant  LOG4PERLCONF => catfile(CONFIGDIR, 'Log4perl.conf');
 
 # Want to export directly, thats OK
